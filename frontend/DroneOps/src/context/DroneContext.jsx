@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
+import api from "../services/api";
 
 // DroneType structure for reference
 // { id: string, name: string, capacity: number, batteryRange: number, maxSpeed: number, description: string }
@@ -24,320 +25,454 @@ import { createContext, useContext, useState } from "react";
 const DroneContext = createContext(null);
 
 export const DroneProvider = ({ children }) => {
-  const [droneTypes, setDroneTypes] = useState([
-    {
-      id: "type-001",
-      name: "Cargo Standard",
-      capacity: 5,
-      batteryRange: 50,
-      maxSpeed: 30,
-      description: "Drone padrão para entregas urbanas",
-    },
-    {
-      id: "type-002",
-      name: "Heavy Lift",
-      capacity: 10,
-      batteryRange: 40,
-      maxSpeed: 25,
-      description: "Drone para cargas pesadas",
-    },
-  ]);
-
-  const [drones, setDrones] = useState([
-    {
-      id: "drone-001",
-      x: 25,
-      y: 25,
-      status: "idle",
-      battery: 85,
-      capacity: 5,
-      currentLoad: 0,
-      serialNumber: "DRN-001",
-      typeId: "type-001",
-      targetX: null,
-      targetY: null,
-    },
-    {
-      id: "drone-002",
-      x: 5,
-      y: 5,
-      status: "flying",
-      battery: 72,
-      capacity: 5,
-      currentLoad: 2.5,
-      serialNumber: "DRN-002",
-      typeId: "type-001",
-      targetX: 12,
-      targetY: 8,
-    },
-    {
-      id: "drone-003",
-      x: 25,
-      y: 25,
-      status: "loading",
-      battery: 95,
-      capacity: 10,
-      currentLoad: 0,
-      serialNumber: "DRN-003",
-      typeId: "type-002",
-      targetX: null,
-      targetY: null,
-    },
-  ]);
-
-  const [orders, setOrders] = useState([
-    {
-      id: "order-001",
-      x: 12,
-      y: 8,
-      weight: 2.5,
-      priority: "high",
-      status: "in-route",
-      createdAt: new Date(Date.now() - 1000 * 60 * 30),
-    },
-    {
-      id: "order-002",
-      x: 18,
-      y: 15,
-      weight: 1.2,
-      priority: "medium",
-      status: "pending",
-      createdAt: new Date(Date.now() - 1000 * 60 * 15),
-    },
-    {
-      id: "order-003",
-      x: 7,
-      y: 20,
-      weight: 3.8,
-      priority: "low",
-      status: "pending",
-      createdAt: new Date(Date.now() - 1000 * 60 * 5),
-    },
-  ]);
-
-  const [noFlyZones, setNoFlyZones] = useState([
-    {
-      id: "nfz-001",
-      points: [
-        { x: 10, y: 10 },
-        { x: 15, y: 10 },
-        { x: 15, y: 15 },
-        { x: 10, y: 15 },
-      ],
-    },
-  ]);
-
+  const [droneTypes, setDroneTypes] = useState([]);
+  const [drones, setDrones] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [noFlyZones, setNoFlyZones] = useState([]);
   const [config, setConfig] = useState({
     optimizationEnabled: true,
     optimizationMethod: "priority-distance-weight",
+    deliveryPriority: "priority",
   });
+  const [stats, setStats] = useState({
+    overview: {
+      totalDrones: 0,
+      activeDrones: 0,
+      idleDrones: 0,
+      totalOrders: 0,
+      pendingOrders: 0,
+      allocatedOrders: 0,
+      deliveredOrders: 0,
+      highPriorityOrders: 0,
+    },
+    performance: {
+      systemEfficiency: 0,
+      droneUtilization: 0,
+      orderProcessing: 0,
+      batteryHealth: 0,
+      activeDroneRate: 0,
+      deliveryRate: 0,
+      avgDeliveryTime: 0,
+      capacityUtilization: 0,
+      totalCapacity: 0,
+      usedCapacity: 0,
+    },
+    recent: {
+      ordersLast24h: 0,
+      ordersLastWeek: 0,
+      avgBattery: 0,
+      totalWeight: 0,
+    },
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const stats = {
-    activeDrones: drones.filter((d) => d.status !== "idle").length,
-    pendingOrders: orders.filter((o) => o.status === "pending").length,
-    averageDeliveryTime: 25.5,
-  };
+  // Load initial data
+  useEffect(() => {
+    loadInitialData();
+  }, []);
 
-  const addOrder = (orderData) => {
-    const newOrder = {
-      ...orderData,
-      id: `order-${Date.now()}`,
-      createdAt: new Date(),
-    };
-    setOrders((prev) => [...prev, newOrder]);
-  };
+  const loadInitialData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-  const updateConfig = (newConfig) => {
-    setConfig((prev) => ({ ...prev, ...newConfig }));
-  };
+      const [
+        droneTypesResponse,
+        dronesResponse,
+        ordersResponse,
+        noFlyZonesResponse,
+        configResponse,
+        statsResponse,
+      ] = await Promise.all([
+        api.getDroneTypes(),
+        api.getDrones(),
+        api.getOrders(),
+        api.getNoFlyZones(),
+        api.getConfig(),
+        api.getDashboardData(),
+      ]);
 
-  const addNoFlyZone = (zoneData) => {
-    const newZone = {
-      ...zoneData,
-      id: `nfz-${Date.now()}`,
-    };
-    setNoFlyZones((prev) => [...prev, newZone]);
-  };
-
-  const removeNoFlyZone = (id) => {
-    setNoFlyZones((prev) => prev.filter((zone) => zone.id !== id));
-  };
-
-  const addDrone = (droneData) => {
-    const droneType = droneTypes.find((t) => t.id === droneData.typeId);
-    const newDrone = {
-      ...droneData,
-      id: `drone-${Date.now()}`,
-      status: "idle",
-      battery: 100,
-      currentLoad: 0,
-      capacity: droneType?.capacity || 5,
-      targetX: null,
-      targetY: null,
-      // Se não especificou posição, usar (25,25) para drones idle
-      x: droneData.x || 25,
-      y: droneData.y || 25,
-    };
-    setDrones((prev) => [...prev, newDrone]);
-  };
-
-  const updateDrone = (id, updates) => {
-    setDrones((prev) =>
-      prev.map((drone) => (drone.id === id ? { ...drone, ...updates } : drone))
-    );
-  };
-
-  const addDroneType = (typeData) => {
-    const newType = {
-      ...typeData,
-      id: `type-${Date.now()}`,
-    };
-    setDroneTypes((prev) => [...prev, newType]);
-  };
-
-  const allocateOrderToDrone = (orderId, droneId) => {
-    const order = orders.find((o) => o.id === orderId);
-    const drone = drones.find((d) => d.id === droneId);
-
-    if (!order || !drone) {
-      return { success: false, message: "Pedido ou drone não encontrado" };
+      setDroneTypes(droneTypesResponse.data || []);
+      setDrones(dronesResponse.data || []);
+      setOrders(ordersResponse.data || []);
+      setNoFlyZones(noFlyZonesResponse.data || []);
+      setConfig(configResponse.data || config);
+      setStats(statsResponse.data || stats);
+    } catch (err) {
+      console.error("Error loading initial data:", err);
+      setError(err.message);
+      // Fallback to empty arrays if API fails
+      setDroneTypes([]);
+      setDrones([]);
+      setOrders([]);
+      setNoFlyZones([]);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    // Verificar se o drone está disponível (idle ou loading)
-    if (drone.status !== "idle" && drone.status !== "loading") {
-      return {
-        success: false,
-        message: "Drone não está disponível para novos pedidos",
-      };
+  const refreshStats = async () => {
+    try {
+      console.log("🔄 Refreshing stats...");
+      const statsResponse = await api.getDashboardData();
+      console.log("📊 New stats received:", statsResponse.data);
+      setStats(statsResponse.data || stats);
+      console.log("✅ Stats updated successfully");
+    } catch (err) {
+      console.error("❌ Error refreshing stats:", err);
     }
+  };
 
-    // Verificar capacidade
-    const currentLoad = drone.currentLoad;
-    const newLoad = currentLoad + order.weight;
+  const addOrder = async (orderData) => {
+    try {
+      // Se forceCreate for true, pular validações e criar o pedido
+      if (orderData.forceCreate) {
+        const response = await api.createOrder({
+          ...orderData,
+          status: "pending",
+        });
+        setOrders((prev) => [...prev, response.data]);
+        await refreshStats();
+        return { success: true, data: response.data };
+      }
 
-    if (newLoad > drone.capacity) {
-      return {
-        success: false,
-        message: `Capacidade excedida! Drone suporta ${drone.capacity}kg, mas tentativa de carregar ${newLoad}kg. Aguarde o drone retornar à base.`,
-      };
+      // Verificar se existe algum tipo de drone que pode carregar o peso
+      const capableDroneTypes = droneTypes.filter(
+        (type) => type.capacity >= orderData.weight
+      );
+
+      if (capableDroneTypes.length === 0) {
+        return {
+          success: false,
+          error: "NAO EXISTE NENHUM DRONE QUE AGUENTE ESTA CARGA",
+        };
+      }
+
+      // Verificar se há drones disponíveis do tipo capaz
+      const availableDrones = drones.filter(
+        (drone) =>
+          (drone.status === "idle" || drone.status === "loading") &&
+          droneTypes.find((type) => type.id === drone.typeId)?.capacity >=
+            orderData.weight
+      );
+
+      if (availableDrones.length === 0) {
+        return {
+          success: false,
+          error:
+            "OS DRONES PARA ESTE PESO ESTAO OCUPADOS NESTE MOMENTO, VOCE DESEJA ACEITAR O PEDIDO?",
+          requiresConfirmation: true,
+        };
+      }
+
+      const response = await api.createOrder({
+        ...orderData,
+        status: "pending",
+      });
+      setOrders((prev) => [...prev, response.data]);
+
+      // Recarregar estatísticas para atualizar eficiência
+      await refreshStats();
+
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Error creating order:", error);
+      return { success: false, error: error.message };
     }
-
-    // Alocar o pedido ao drone
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId ? { ...o, droneId: droneId, status: "allocated" } : o
-      )
-    );
-
-    // Atualizar carga do drone e definir destino
-    setDrones((prev) =>
-      prev.map((d) =>
-        d.id === droneId
-          ? {
-              ...d,
-              currentLoad: newLoad,
-              status: "loading",
-              targetX: order.x,
-              targetY: order.y,
-            }
-          : d
-      )
-    );
-
-    return { success: true, message: "Pedido alocado com sucesso!" };
   };
 
-  const removeOrderFromDrone = (orderId) => {
-    const order = orders.find((o) => o.id === orderId);
-    if (!order || !order.droneId) return;
-
-    const drone = drones.find((d) => d.id === order.droneId);
-    if (!drone) return;
-
-    // Remover pedido do drone
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId ? { ...o, droneId: null, status: "pending" } : o
-      )
-    );
-
-    // Atualizar carga do drone
-    const newLoad = Math.max(0, drone.currentLoad - order.weight);
-    setDrones((prev) =>
-      prev.map((d) =>
-        d.id === order.droneId
-          ? {
-              ...d,
-              currentLoad: newLoad,
-              status: newLoad === 0 ? "idle" : "loading",
-              targetX: newLoad === 0 ? null : d.targetX,
-              targetY: newLoad === 0 ? null : d.targetY,
-            }
-          : d
-      )
-    );
-  };
-
-  const getDroneOrders = (droneId) => {
-    return orders.filter((order) => order.droneId === droneId);
-  };
-
-  const updateDroneStatus = (droneId, newStatus) => {
-    setDrones((prev) =>
-      prev.map((drone) =>
-        drone.id === droneId
-          ? {
-              ...drone,
-              status: newStatus,
-              // Se mudou para idle, posicionar em (25,25)
-              x: newStatus === "idle" ? 25 : drone.x,
-              y: newStatus === "idle" ? 25 : drone.y,
-              // Limpar destino se voltou para idle
-              targetX: newStatus === "idle" ? null : drone.targetX,
-              targetY: newStatus === "idle" ? null : drone.targetY,
-            }
-          : drone
-      )
-    );
-  };
-
-  const deleteDrone = (droneId) => {
-    // Remover pedidos alocados ao drone antes de excluí-lo
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.droneId === droneId
-          ? { ...order, droneId: null, status: "pending" }
-          : order
-      )
-    );
-
-    // Remover o drone
-    setDrones((prev) => prev.filter((drone) => drone.id !== droneId));
-  };
-
-  const deleteOrder = (orderId) => {
-    setOrders((prev) => prev.filter((order) => order.id !== orderId));
-  };
-
-  const deleteDroneType = (typeId) => {
-    // Verificar se há drones usando este tipo
-    const dronesUsingType = drones.filter((drone) => drone.typeId === typeId);
-    if (dronesUsingType.length > 0) {
-      return {
-        success: false,
-        message: `Não é possível excluir este tipo. Há ${dronesUsingType.length} drone(s) usando este tipo.`,
-      };
+  const updateConfig = async (newConfig) => {
+    try {
+      const response = await api.updateConfig(newConfig);
+      setConfig(response.data);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Error updating config:", error);
+      return { success: false, error: error.message };
     }
-
-    // Remover o tipo de drone
-    setDroneTypes((prev) => prev.filter((type) => type.id !== typeId));
-    return { success: true, message: "Tipo de drone excluído com sucesso!" };
   };
 
-  const updateDroneType = (typeId, updates) => {
-    setDroneTypes((prev) =>
-      prev.map((type) => (type.id === typeId ? { ...type, ...updates } : type))
-    );
+  const addNoFlyZone = async (zoneData) => {
+    try {
+      const response = await api.createNoFlyZone(zoneData);
+      setNoFlyZones((prev) => [...prev, response.data]);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Error creating no-fly zone:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const removeNoFlyZone = async (id) => {
+    try {
+      await api.deleteNoFlyZone(id);
+      setNoFlyZones((prev) => prev.filter((zone) => zone.id !== id));
+      return { success: true };
+    } catch (error) {
+      console.error("Error deleting no-fly zone:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const addDrone = async (droneData) => {
+    try {
+      const response = await api.createDrone({
+        ...droneData,
+        x: droneData.x || 25,
+        y: droneData.y || 25,
+      });
+      setDrones((prev) => [...prev, response.data]);
+
+      // Recarregar estatísticas para atualizar eficiência
+      await refreshStats();
+
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Error creating drone:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const updateDrone = async (id, updates) => {
+    try {
+      const response = await api.updateDrone(id, updates);
+      setDrones((prev) =>
+        prev.map((drone) => (drone.id === id ? response.data : drone))
+      );
+
+      // Recarregar estatísticas para atualizar eficiência
+      await refreshStats();
+
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Error updating drone:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const addDroneType = async (typeData) => {
+    try {
+      const response = await api.createDroneType(typeData);
+      setDroneTypes((prev) => [...prev, response.data]);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Error creating drone type:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const allocateOrderToDrone = async (orderId, droneId) => {
+    try {
+      // Buscar o pedido e o drone para validação local
+      const order = orders.find((o) => o.id === orderId);
+      const drone = drones.find((d) => d.id === droneId);
+
+      if (order && drone) {
+        // Verificar se o drone pode carregar o peso
+        const newLoad = drone.currentLoad + order.weight;
+        if (newLoad > drone.capacity) {
+          return {
+            success: false,
+            message: `Capacidade excedida! O drone suporta ${drone.capacity}kg, mas tentando carregar ${newLoad}kg. Peso atual: ${drone.currentLoad}kg, Peso do pedido: ${order.weight}kg.`,
+          };
+        }
+      }
+
+      const response = await api.allocateOrderToDrone(droneId, orderId);
+
+      if (response.success) {
+        // Atualizar estado local
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? { ...o, droneId: droneId, status: "allocated" }
+              : o
+          )
+        );
+
+        // Recarregar dados do drone para ter informações atualizadas
+        const droneResponse = await api.getDrone(droneId);
+        setDrones((prev) =>
+          prev.map((d) => (d.id === droneId ? droneResponse.data : d))
+        );
+
+        // Recarregar estatísticas para atualizar eficiência
+        await refreshStats();
+      }
+
+      return response;
+    } catch (error) {
+      console.error("Error allocating order to drone:", error);
+      return { success: false, message: error.message };
+    }
+  };
+
+  const removeOrderFromDrone = async (orderId) => {
+    try {
+      const order = orders.find((o) => o.id === orderId);
+      if (!order || !order.droneId) {
+        return {
+          success: false,
+          message: "Pedido não encontrado ou não alocado",
+        };
+      }
+
+      console.log("🗑️ Removing order", orderId, "from drone", order.droneId);
+      const response = await api.removeOrderFromDrone(order.droneId, orderId);
+      console.log("📋 Removal result:", response);
+
+      if (response.success) {
+        // Atualizar estado local
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId ? { ...o, droneId: null, status: "pending" } : o
+          )
+        );
+
+        // Recarregar dados do drone
+        const droneResponse = await api.getDrone(order.droneId);
+        setDrones((prev) =>
+          prev.map((d) => (d.id === order.droneId ? droneResponse.data : d))
+        );
+
+        // Recarregar estatísticas para atualizar eficiência
+        await refreshStats();
+      }
+
+      return response;
+    } catch (error) {
+      console.error("❌ Error removing order from drone:", error);
+      return { success: false, message: error.message };
+    }
+  };
+
+  const getDroneOrders = async (droneId) => {
+    try {
+      const response = await api.getDroneOrders(droneId);
+      return response.data || [];
+    } catch (error) {
+      console.error("Error getting drone orders:", error);
+      return [];
+    }
+  };
+
+  const updateDroneStatus = async (droneId, newStatus) => {
+    try {
+      const response = await api.updateDroneStatus(droneId, newStatus);
+      setDrones((prev) =>
+        prev.map((drone) => (drone.id === droneId ? response.data : drone))
+      );
+
+      // Recarregar estatísticas para atualizar eficiência
+      await refreshStats();
+
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Error updating drone status:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const deleteDrone = async (droneId) => {
+    try {
+      await api.deleteDrone(droneId);
+      setDrones((prev) => prev.filter((drone) => drone.id !== droneId));
+      // Remover pedidos alocados ao drone
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.droneId === droneId
+            ? { ...order, droneId: null, status: "pending" }
+            : order
+        )
+      );
+
+      // Recarregar estatísticas para atualizar eficiência
+      await refreshStats();
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error deleting drone:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const deleteOrder = async (orderId) => {
+    try {
+      await api.deleteOrder(orderId);
+      setOrders((prev) => prev.filter((order) => order.id !== orderId));
+      return { success: true };
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const deleteDroneType = async (typeId) => {
+    try {
+      const response = await api.deleteDroneType(typeId);
+      if (response.success) {
+        setDroneTypes((prev) => prev.filter((type) => type.id !== typeId));
+      }
+      return response;
+    } catch (error) {
+      console.error("Error deleting drone type:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const updateDroneType = async (typeId, updates) => {
+    try {
+      const response = await api.updateDroneType(typeId, updates);
+      setDroneTypes((prev) =>
+        prev.map((type) => (type.id === typeId ? response.data : type))
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Error updating drone type:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Calcular distância entre dois pontos
+  const calculateDistance = (x1, y1, x2, y2) => {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+  };
+
+  // Calcular tempo de entrega baseado na distância e velocidade do drone
+  const calculateDeliveryTime = (drone, order) => {
+    const distance = calculateDistance(drone.x, drone.y, order.x, order.y);
+    const droneType = droneTypes.find((type) => type.id === drone.typeId);
+    const speed = droneType ? droneType.maxSpeed : 10; // velocidade padrão se não encontrar o tipo
+    return distance / speed; // tempo em horas
+  };
+
+  // Calcular ordem de entrega baseada na prioridade configurada
+  const calculateDeliveryOrder = (droneOrders, priorityMethod = "priority") => {
+    const centralX = 25;
+    const centralY = 25;
+
+    return droneOrders.sort((a, b) => {
+      switch (priorityMethod) {
+        case "priority":
+          const priorityOrder = { high: 3, medium: 2, low: 1 };
+          return priorityOrder[b.priority] - priorityOrder[a.priority];
+
+        case "distance":
+          const distanceA = calculateDistance(centralX, centralY, a.x, a.y);
+          const distanceB = calculateDistance(centralX, centralY, b.x, b.y);
+          return distanceA - distanceB;
+
+        case "first-come-first-served":
+          return (
+            new Date(a.created_at || a.createdAt) -
+            new Date(b.created_at || b.createdAt)
+          );
+
+        default:
+          return 0;
+      }
+    });
   };
 
   // Algoritmo de pathfinding que evita zonas de exclusão
@@ -487,6 +622,8 @@ export const DroneProvider = ({ children }) => {
         config,
         droneTypes,
         stats,
+        loading,
+        error,
         addOrder,
         updateConfig,
         addNoFlyZone,
@@ -499,10 +636,15 @@ export const DroneProvider = ({ children }) => {
         getDroneOrders,
         updateDroneStatus,
         calculateDeliveryRoute,
+        calculateDistance,
+        calculateDeliveryTime,
+        calculateDeliveryOrder,
         deleteDrone,
         deleteOrder,
         deleteDroneType,
         updateDroneType,
+        loadInitialData,
+        refreshStats,
       }}
     >
       {children}

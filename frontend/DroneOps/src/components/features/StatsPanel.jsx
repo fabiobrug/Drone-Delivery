@@ -3,10 +3,12 @@
 import React from "react";
 import { useDroneContext } from "../../context/DroneContext";
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 const StatsPanel = () => {
   const { drones, stats } = useDroneContext();
   const [displayStats, setDisplayStats] = useState(stats);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -36,36 +38,26 @@ const StatsPanel = () => {
   };
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg hover-lift">
-      <div className="bg-gray-700 px-4 py-3 border-b border-gray-600">
+    <div
+      className="bg-gray-800 border border-gray-700 rounded-lg hover-lift flex flex-col"
+      style={{ minHeight: "70vh" }}
+    >
+      <div className="bg-gray-700 px-4 py-3 border-b border-gray-600 flex-shrink-0">
         <h3 className="text-lg font-semibold text-white">Estatísticas</h3>
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4 flex-1 overflow-y-auto">
         {/* Drone Status Overview */}
         <div className="animate-fadeInUp">
           <h4 className="text-sm font-medium text-gray-300 mb-2">
             Drones Ativos
           </h4>
           <div className="bg-gray-900 rounded-lg p-3 hover:bg-gray-850 transition-colors">
-            <div className="text-2xl font-bold text-white mb-1 transition-all duration-300">
-              {drones.length}
+            <div className="text-2xl font-bold text-blue-400 mb-1 transition-all duration-300">
+              {displayStats.overview?.activeDrones || 0}
             </div>
-            <div className="text-sm text-gray-400">Total de Drones</div>
-
-            <div className="mt-3 space-y-1">
-              {Object.entries(dronesByStatus).map(([status, count], index) => (
-                <div
-                  key={status}
-                  className="flex justify-between text-sm animate-slideInRight"
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  <span className="text-gray-400">{getStatusText(status)}</span>
-                  <span className="text-white font-medium transition-all duration-300">
-                    {count}
-                  </span>
-                </div>
-              ))}
+            <div className="text-sm text-gray-400">
+              de {displayStats.overview?.totalDrones || 0} total
             </div>
           </div>
         </div>
@@ -75,35 +67,91 @@ const StatsPanel = () => {
           <h4 className="text-sm font-medium text-gray-300 mb-2">Pedidos</h4>
           <div className="bg-gray-900 rounded-lg p-3 hover:bg-gray-850 transition-colors">
             <div className="text-2xl font-bold text-orange-400 mb-1 transition-all duration-300">
-              {displayStats.pendingOrders}
+              {displayStats.overview?.pendingOrders || 0}
             </div>
             <div className="text-sm text-gray-400">Pendentes</div>
           </div>
         </div>
 
-        {/* Average Delivery Time */}
+        {/* System Efficiency */}
         <div className="animate-fadeInUp" style={{ animationDelay: "200ms" }}>
-          <h4 className="text-sm font-medium text-gray-300 mb-2">
-            Performance
-          </h4>
+          <h4 className="text-sm font-medium text-gray-300 mb-2">Eficiência</h4>
           <div className="bg-gray-900 rounded-lg p-3 hover:bg-gray-850 transition-colors">
-            <div className="text-2xl font-bold text-blue-400 mb-1 transition-all duration-300">
-              {displayStats.averageDeliveryTime}min
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-bold text-blue-400 mb-1 transition-all duration-300">
+                  {displayStats.performance?.systemEfficiency || 0}%
+                </div>
+                <div className="text-sm text-gray-400">
+                  Eficiência do Sistema
+                </div>
+              </div>
+              <button
+                onClick={() => navigate("/efficiency-analysis")}
+                className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded transition-colors"
+              >
+                Saiba Mais
+              </button>
             </div>
-            <div className="text-sm text-gray-400">Tempo Médio de Entrega</div>
           </div>
         </div>
 
-        {/* System Status */}
+        {/* Battery Status */}
         <div className="animate-fadeInUp" style={{ animationDelay: "300ms" }}>
-          <h4 className="text-sm font-medium text-gray-300 mb-2">Sistema</h4>
+          <h4 className="text-sm font-medium text-gray-300 mb-2">Bateria</h4>
           <div className="bg-gray-900 rounded-lg p-3 hover:bg-gray-850 transition-colors">
-            <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-sm text-green-400">Operacional</span>
+            <div className="text-2xl font-bold text-yellow-400 mb-1 transition-all duration-300">
+              {displayStats.recent?.avgBattery || 0}%
             </div>
-            <div className="text-xs text-gray-400 mt-1">
-              Todos os sistemas funcionando normalmente
+            <div className="text-sm text-gray-400">Média</div>
+          </div>
+        </div>
+
+        {/* Capacity Usage */}
+        <div className="animate-fadeInUp" style={{ animationDelay: "400ms" }}>
+          <h4 className="text-sm font-medium text-gray-300 mb-2">Capacidade</h4>
+          <div className="bg-gray-900 rounded-lg p-3 hover:bg-gray-850 transition-colors">
+            <div className="text-2xl font-bold text-green-400 mb-1 transition-all duration-300">
+              {displayStats.performance?.usedCapacity || 0}kg
+            </div>
+            <div className="text-sm text-gray-400">
+              de {displayStats.performance?.totalCapacity || 0}kg
+            </div>
+          </div>
+        </div>
+
+        {/* Status Breakdown */}
+        <div className="animate-fadeInUp" style={{ animationDelay: "500ms" }}>
+          <h4 className="text-sm font-medium text-gray-300 mb-2">
+            Status dos Drones
+          </h4>
+          <div className="space-y-2">
+            {Object.entries(dronesByStatus).map(([status, count], index) => (
+              <div
+                key={status}
+                className="flex justify-between items-center p-2 bg-gray-900 rounded hover:bg-gray-850 transition-colors"
+                style={{
+                  animationDelay: `${600 + index * 100}ms`,
+                }}
+              >
+                <span className="text-gray-300 text-sm">
+                  {getStatusText(status)}
+                </span>
+                <span className="text-white font-medium">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="animate-fadeInUp" style={{ animationDelay: "700ms" }}>
+          <div className="bg-gray-900 rounded-lg p-3 text-xs text-gray-400">
+            <div className="flex justify-between">
+              <span>
+                Eficiência: {displayStats.performance?.systemEfficiency || 0}% |
+                Drones Ativos: {displayStats.overview?.activeDrones || 0}/
+                {displayStats.overview?.totalDrones || 0}
+              </span>
             </div>
           </div>
         </div>

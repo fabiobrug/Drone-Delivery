@@ -1,27 +1,91 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useDroneContext } from "../../context/DroneContext";
+import { useNotification } from "../../context/NotificationContext";
 
 const DroneOrders = ({ droneId, onClose }) => {
-  const { orders, allocateOrderToDrone, removeOrderFromDrone, getDroneOrders } =
-    useDroneContext();
+  const {
+    orders,
+    allocateOrderToDrone,
+    removeOrderFromDrone,
+    getDroneOrders,
+    drones,
+  } = useDroneContext();
+  const { showSuccess, showError } = useNotification();
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
+  const [droneOrders, setDroneOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const droneOrders = getDroneOrders(droneId);
   const availableOrders = orders.filter((order) => order.status === "pending");
+  const currentDrone = drones.find((d) => d.id === droneId);
 
-  const handleAllocateOrder = (orderId) => {
-    const result = allocateOrderToDrone(orderId, droneId);
+  useEffect(() => {
+    const loadDroneOrders = async () => {
+      try {
+        console.log("🔄 Loading drone orders for drone:", droneId);
+        setLoading(true);
+        const orders = await getDroneOrders(droneId);
+        console.log("📦 Drone orders loaded:", orders);
+        setDroneOrders(orders);
+      } catch (error) {
+        console.error("❌ Error loading drone orders:", error);
+        setDroneOrders([]);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    if (!result.success) {
-      setAlertMessage(result.message);
+    if (droneId) {
+      loadDroneOrders();
+    }
+  }, [droneId, getDroneOrders]);
+
+  const handleAllocateOrder = async (orderId) => {
+    console.log("🚀 Allocating order", orderId, "to drone", droneId);
+    const result = await allocateOrderToDrone(orderId, droneId);
+    console.log("📋 Allocation result:", result);
+
+    if (result.success) {
+      // Recarregar pedidos do drone
+      console.log("🔄 Reloading drone orders...");
+      const orders = await getDroneOrders(droneId);
+      setDroneOrders(orders);
+      console.log("✅ Drone orders reloaded:", orders);
+
+      // Mostrar notificação de sucesso
+      showSuccess("Pedido alocado com sucesso ao drone!");
+    } else {
+      const errorMessage =
+        result.message || result.error || "Erro ao alocar pedido";
+      setAlertMessage(errorMessage);
       setShowAlert(true);
       setTimeout(() => setShowAlert(false), 5000);
+      showError(errorMessage);
     }
   };
 
-  const handleRemoveOrder = (orderId) => {
-    removeOrderFromDrone(orderId);
+  const handleRemoveOrder = async (orderId) => {
+    console.log("🗑️ Removing order", orderId, "from drone", droneId);
+    const result = await removeOrderFromDrone(orderId);
+    console.log("📋 Removal result:", result);
+
+    if (result.success) {
+      // Recarregar pedidos do drone
+      console.log("🔄 Reloading drone orders...");
+      const orders = await getDroneOrders(droneId);
+      setDroneOrders(orders);
+      console.log("✅ Drone orders reloaded:", orders);
+
+      // Mostrar notificação de sucesso
+      showSuccess("Pedido removido com sucesso do drone!");
+    } else {
+      const errorMessage =
+        result.message || result.error || "Erro ao remover pedido";
+      setAlertMessage(errorMessage);
+      setShowAlert(true);
+      setTimeout(() => setShowAlert(false), 5000);
+      showError(errorMessage);
+    }
   };
 
   const getPriorityColor = (priority) => {
@@ -55,7 +119,27 @@ const DroneOrders = ({ droneId, onClose }) => {
       <div className="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden my-8">
         {/* Header */}
         <div className="bg-gray-700 px-4 py-3 border-b border-gray-600 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">Pedidos do Drone</h3>
+          <div>
+            <h3 className="text-lg font-semibold text-white">
+              Pedidos do Drone
+            </h3>
+            {currentDrone && (
+              <div className="text-sm text-gray-300 mt-1">
+                Peso usado: {currentDrone.currentLoad}kg /{" "}
+                {currentDrone.capacity}kg
+                <div className="w-full bg-gray-600 rounded-full h-2 mt-1">
+                  <div
+                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${
+                        (currentDrone.currentLoad / currentDrone.capacity) * 100
+                      }%`,
+                    }}
+                  ></div>
+                </div>
+              </div>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white transition-colors"
@@ -103,7 +187,11 @@ const DroneOrders = ({ droneId, onClose }) => {
               Pedidos Atuais
             </h4>
             <div className="space-y-2 max-h-80 overflow-y-auto">
-              {droneOrders.length === 0 ? (
+              {loading ? (
+                <div className="text-gray-400 text-center py-4">
+                  Carregando pedidos...
+                </div>
+              ) : droneOrders.length === 0 ? (
                 <div className="text-gray-400 text-center py-4">
                   Nenhum pedido alocado
                 </div>
@@ -132,7 +220,10 @@ const DroneOrders = ({ droneId, onClose }) => {
                       </div>
                       <div>Peso: {order.weight} kg</div>
                       <div>
-                        Criado: {new Date(order.createdAt).toLocaleString()}
+                        Criado:{" "}
+                        {new Date(
+                          order.created_at || order.createdAt
+                        ).toLocaleString()}
                       </div>
                     </div>
 
@@ -183,7 +274,10 @@ const DroneOrders = ({ droneId, onClose }) => {
                       </div>
                       <div>Peso: {order.weight} kg</div>
                       <div>
-                        Criado: {new Date(order.createdAt).toLocaleString()}
+                        Criado:{" "}
+                        {new Date(
+                          order.created_at || order.createdAt
+                        ).toLocaleString()}
                       </div>
                     </div>
 

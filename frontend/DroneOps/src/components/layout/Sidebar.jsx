@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   ChartBarIcon,
   ClipboardDocumentListIcon,
@@ -9,39 +10,44 @@ import {
   WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 
-// Props are destructured directly in the function parameter
-
-const Sidebar = ({ activeTab, setActiveTab }) => {
+const Sidebar = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const menuItems = [
     {
       id: "dashboard",
       name: "Dashboard",
       icon: ChartBarIcon,
       description: "Monitoramento",
+      path: "/dashboard",
     },
     {
       id: "drones",
       name: "Drones",
       icon: CommandLineIcon,
       description: "Gerenciamento",
+      path: "/drones",
     },
     {
       id: "drone-types",
       name: "Tipos de Drones",
       icon: WrenchScrewdriverIcon,
       description: "Especificações",
+      path: "/drone-types",
     },
     {
       id: "orders",
       name: "Pedidos",
       icon: ClipboardDocumentListIcon,
       description: "Gerenciamento",
+      path: "/orders",
     },
     {
       id: "config",
       name: "Configurações",
       icon: CogIcon,
       description: "Sistema",
+      path: "/config",
     },
   ];
 
@@ -60,12 +66,15 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
       <nav className="mt-8">
         {menuItems.map((item, index) => {
           const Icon = item.icon;
+          const isActive =
+            location.pathname === item.path ||
+            (location.pathname === "/" && item.path === "/dashboard");
           return (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => navigate(item.path)}
               className={`w-full flex items-center px-6 py-3 text-left transition-all duration-200 hover-lift ${
-                activeTab === item.id
+                isActive
                   ? "bg-blue-600 text-white border-r-2 border-blue-400 transform translate-x-1"
                   : "text-gray-300 hover:bg-gray-700 hover:text-white"
               }`}

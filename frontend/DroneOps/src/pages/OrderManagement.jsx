@@ -33,7 +33,8 @@ const OrderManagement = () => {
           return b.weight - a.weight;
         case "createdAt":
           return (
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            new Date(b.created_at || b.createdAt).getTime() -
+            new Date(a.created_at || a.createdAt).getTime()
           );
         default:
           return 0;
@@ -41,18 +42,43 @@ const OrderManagement = () => {
     });
   }, [orders, sortBy, filterStatus]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (formData.x && formData.y && formData.weight) {
-      addOrder({
+      const result = await addOrder({
         x: Number.parseInt(formData.x),
         y: Number.parseInt(formData.y),
         weight: Number.parseFloat(formData.weight),
         priority: formData.priority,
-        status: "pending",
       });
-      setFormData({ x: "", y: "", weight: "", priority: "medium" });
-      setShowForm(false);
+
+      if (result.success) {
+        setFormData({ x: "", y: "", weight: "", priority: "medium" });
+        setShowForm(false);
+      } else if (result.requiresConfirmation) {
+        const confirmed = window.confirm(
+          `${result.error}\n\nClique OK para aceitar o pedido mesmo assim.`
+        );
+        if (confirmed) {
+          // Criar o pedido mesmo sem drones disponíveis
+          const confirmResult = await addOrder({
+            x: Number.parseInt(formData.x),
+            y: Number.parseInt(formData.y),
+            weight: Number.parseFloat(formData.weight),
+            priority: formData.priority,
+            forceCreate: true, // Flag para forçar criação
+          });
+
+          if (confirmResult.success) {
+            setFormData({ x: "", y: "", weight: "", priority: "medium" });
+            setShowForm(false);
+          } else {
+            alert(`Erro ao criar pedido: ${confirmResult.error}`);
+          }
+        }
+      } else {
+        alert(`Erro ao criar pedido: ${result.error}`);
+      }
     }
   };
 
@@ -180,7 +206,6 @@ const OrderManagement = () => {
                 type="number"
                 step="0.1"
                 min="0.1"
-                max="10"
                 value={formData.weight}
                 onChange={(e) =>
                   setFormData({ ...formData, weight: e.target.value })
@@ -325,7 +350,9 @@ const OrderManagement = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                    {new Date(order.createdAt).toLocaleString("pt-BR")}
+                    {new Date(
+                      order.created_at || order.createdAt
+                    ).toLocaleString("pt-BR")}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button

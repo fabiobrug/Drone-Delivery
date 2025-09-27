@@ -10,6 +10,7 @@ import {
   MapPinIcon,
 } from "@heroicons/react/24/outline";
 import DroneOrders from "../components/features/DroneOrders";
+import DroneDeliveryInfo from "../components/features/DroneDeliveryInfo";
 
 const DroneManagement = () => {
   const {
@@ -21,7 +22,6 @@ const DroneManagement = () => {
     updateDroneStatus,
     deleteDrone,
   } = useDroneContext();
-  const [selectedDrone, setSelectedDrone] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showTypeForm, setShowTypeForm] = useState(false);
   const [selectedDroneForOrders, setSelectedDroneForOrders] = useState(null);
@@ -70,24 +70,32 @@ const DroneManagement = () => {
     }
   };
 
-  const handleCreateDroneType = (e) => {
+  const handleCreateDroneType = async (e) => {
     e.preventDefault();
-    addDroneType(newDroneType);
-    setNewDroneType({
-      name: "",
-      capacity: 5,
-      batteryRange: 50,
-      maxSpeed: 30,
-      description: "",
-    });
-    setShowTypeForm(false);
+    const result = await addDroneType(newDroneType);
+    if (result.success) {
+      setNewDroneType({
+        name: "",
+        capacity: 5,
+        batteryRange: 50,
+        maxSpeed: 30,
+        description: "",
+      });
+      setShowTypeForm(false);
+    } else {
+      alert(`Erro ao criar tipo de drone: ${result.error}`);
+    }
   };
 
-  const handleCreateDrone = (e) => {
+  const handleCreateDrone = async (e) => {
     e.preventDefault();
-    addDrone(newDrone);
-    setNewDrone({ serialNumber: "", typeId: "", x: 5, y: 5 });
-    setShowCreateForm(false);
+    const result = await addDrone(newDrone);
+    if (result.success) {
+      setNewDrone({ serialNumber: "", typeId: "", x: 5, y: 5 });
+      setShowCreateForm(false);
+    } else {
+      alert(`Erro ao criar drone: ${result.error}`);
+    }
   };
 
   return (
@@ -182,7 +190,7 @@ const DroneManagement = () => {
                   Drone
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                  Status
+                  Status / Pedidos
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                   Bateria
@@ -202,14 +210,7 @@ const DroneManagement = () => {
               {drones.map((drone) => (
                 <tr
                   key={drone.id}
-                  className={`hover:bg-gray-700 transition-colors cursor-pointer ${
-                    selectedDrone === drone.id ? "bg-gray-700" : ""
-                  }`}
-                  onClick={() =>
-                    setSelectedDrone(
-                      selectedDrone === drone.id ? null : drone.id
-                    )
-                  }
+                  className="hover:bg-gray-700 transition-colors"
                 >
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -225,13 +226,16 @@ const DroneManagement = () => {
                     </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
-                    <span
-                      className={`text-sm font-medium ${getStatusColor(
-                        drone.status
-                      )}`}
-                    >
-                      {drone.status.toUpperCase()}
-                    </span>
+                    <div className="flex items-center space-x-3">
+                      <span
+                        className={`text-sm font-medium ${getStatusColor(
+                          drone.status
+                        )}`}
+                      >
+                        {drone.status.toUpperCase()}
+                      </span>
+                      <DroneDeliveryInfo drone={drone} />
+                    </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -254,15 +258,16 @@ const DroneManagement = () => {
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div className="text-sm text-white">
-                      {drone.currentLoad}kg / {drone.capacity}kg
+                      {drone.currentLoad || 0}kg / {drone.capacity}kg
                     </div>
                     <div className="w-16 bg-gray-600 rounded-full h-1 mt-1">
                       <div
                         className="h-1 rounded-full bg-blue-400"
                         style={{
-                          width: `${
-                            (drone.currentLoad / drone.capacity) * 100
-                          }%`,
+                          width: `${Math.max(
+                            0,
+                            ((drone.currentLoad || 0) / drone.capacity) * 100
+                          )}%`,
                         }}
                       />
                     </div>
@@ -299,58 +304,6 @@ const DroneManagement = () => {
           </table>
         </div>
       </div>
-
-      {/* Drone Details Panel */}
-      {selectedDrone && (
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-          <h3 className="text-xl font-semibold text-white mb-4">
-            Detalhes do Drone:{" "}
-            {drones.find((d) => d.id === selectedDrone)?.serialNumber}
-          </h3>
-          {/* Detailed drone information and configuration options would go here */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h4 className="text-lg font-medium text-white mb-3">
-                Informações Gerais
-              </h4>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">ID:</span>
-                  <span className="text-white">{selectedDrone}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Status:</span>
-                  <span
-                    className={getStatusColor(
-                      drones.find((d) => d.id === selectedDrone)?.status || ""
-                    )}
-                  >
-                    {drones
-                      .find((d) => d.id === selectedDrone)
-                      ?.status?.toUpperCase()}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <h4 className="text-lg font-medium text-white mb-3">
-                Configurações
-              </h4>
-              <div className="space-y-3">
-                <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg transition-colors">
-                  Calibrar Sensores
-                </button>
-                <button className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition-colors">
-                  Teste de Voo
-                </button>
-                <button className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-2 px-4 rounded-lg transition-colors">
-                  Retornar à Base
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Create Drone Type Modal */}
       {showTypeForm && (

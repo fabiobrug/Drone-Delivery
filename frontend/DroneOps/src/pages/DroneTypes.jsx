@@ -23,22 +23,28 @@ const DroneTypes = () => {
     description: "",
   });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    let result;
     if (editingType) {
-      updateDroneType(editingType.id, newDroneType);
-      setEditingType(null);
+      result = await updateDroneType(editingType.id, newDroneType);
     } else {
-      addDroneType(newDroneType);
+      result = await addDroneType(newDroneType);
     }
-    setNewDroneType({
-      name: "",
-      capacity: 5,
-      batteryRange: 50,
-      maxSpeed: 30,
-      description: "",
-    });
-    setShowForm(false);
+
+    if (result.success) {
+      setEditingType(null);
+      setNewDroneType({
+        name: "",
+        capacity: 5,
+        batteryRange: 50,
+        maxSpeed: 30,
+        description: "",
+      });
+      setShowForm(false);
+    } else {
+      alert(`Erro: ${result.error}`);
+    }
   };
 
   const handleEdit = (type) => {
@@ -46,8 +52,8 @@ const DroneTypes = () => {
     setNewDroneType({
       name: type.name,
       capacity: type.capacity,
-      batteryRange: type.batteryRange,
-      maxSpeed: type.maxSpeed,
+      batteryRange: type.battery_range || type.batteryRange,
+      maxSpeed: type.max_speed || type.maxSpeed,
       description: type.description,
     });
     setShowForm(true);
@@ -65,20 +71,22 @@ const DroneTypes = () => {
     setShowForm(false);
   };
 
-  const handleDelete = (typeId) => {
-    const result = deleteDroneType(typeId);
+  const handleDelete = async (typeId) => {
+    const result = await deleteDroneType(typeId);
     if (!result.success) {
-      alert(result.message);
+      alert(result.message || result.error);
     }
   };
 
   const getDroneTypeStats = (typeId) => {
-    const dronesOfType = drones.filter((drone) => drone.typeId === typeId);
+    const dronesOfType = drones.filter(
+      (drone) => (drone.typeId || drone.type_id) === typeId
+    );
     const activeDrones = dronesOfType.filter(
       (drone) => drone.status !== "idle"
     );
     const totalDeliveries = dronesOfType.reduce(
-      (acc, drone) => acc + drone.currentLoad,
+      (acc, drone) => acc + (drone.current_load || drone.currentLoad || 0),
       0
     );
     const avgBattery =
@@ -95,7 +103,7 @@ const DroneTypes = () => {
       totalDeliveries: totalDeliveries,
       avgBattery: avgBattery,
       efficiency:
-        activeDrones.length > 0
+        dronesOfType.length > 0
           ? Math.round((activeDrones.length / dronesOfType.length) * 100)
           : 0,
     };
@@ -220,13 +228,13 @@ const DroneTypes = () => {
                 <div className="flex justify-between items-center">
                   <span className="text-gray-300 text-sm">Autonomia:</span>
                   <span className="text-white font-medium">
-                    {type.batteryRange} km
+                    {type.battery_range || type.batteryRange} km
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-300 text-sm">Velocidade:</span>
                   <span className="text-white font-medium">
-                    {type.maxSpeed} km/h
+                    {type.max_speed || type.maxSpeed} km/h
                   </span>
                 </div>
               </div>

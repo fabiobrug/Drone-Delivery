@@ -4,9 +4,9 @@ import StatsPanel from "../components/features/StatsPanel";
 
 const Dashboard = () => {
   return (
-    <div className="h-full flex flex-col p-6 space-y-6">
+    <div className="min-h-screen flex flex-col p-6 space-y-6">
       {/* Header */}
-      <div>
+      <div className="flex-shrink-0">
         <h1 className="text-2xl font-bold text-white mb-2">
           Dashboard de Monitoramento
         </h1>
@@ -15,19 +15,19 @@ const Dashboard = () => {
         </p>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
-        {/* Map Section - Now takes up more space */}
-        <div className="col-span-9 flex flex-col min-h-0">
+      {/* Main Content Grid - Equal height containers */}
+      <div
+        className="flex-1 grid grid-cols-12 gap-6"
+        style={{ minHeight: "70vh" }}
+      >
+        {/* Map Section - 9 columns */}
+        <div className="col-span-9">
           <InteractiveMap />
         </div>
 
-        {/* Right Sidebar - Now only contains statistics */}
-        <div className="col-span-3 flex flex-col space-y-6 min-h-0">
-          {/* Statistics Panel */}
-          <div className="flex-shrink-0">
-            <StatsPanel />
-          </div>
+        {/* Right Sidebar - 3 columns, same height as map */}
+        <div className="col-span-3">
+          <StatsPanel />
         </div>
       </div>
     </div>
