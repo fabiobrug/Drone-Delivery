@@ -258,9 +258,9 @@ const DroneTypes = () => {
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-400">Entregas:</span>
+                    <span className="text-gray-400">Pedidos Entregues:</span>
                     <span className="text-blue-400 ml-2 font-medium">
-                      {stats.totalDeliveries} kg
+                      {type.delivered_orders || 0}/{type.total_orders || 0}
                     </span>
                   </div>
                   <div>

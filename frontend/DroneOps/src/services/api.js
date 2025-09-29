@@ -8,6 +8,9 @@ class ApiService {
 
   async request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
+    console.log(`🔍 DEBUG - API request URL: ${url}`);
+    console.log(`🔍 DEBUG - API request options:`, options);
+
     const config = {
       headers: {
         "Content-Type": "application/json",
@@ -18,7 +21,9 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
+      console.log(`🔍 DEBUG - API response status: ${response.status}`);
       const data = await response.json();
+      console.log(`🔍 DEBUG - API response data:`, data);
 
       if (!response.ok) {
         throw new Error(data.error || `HTTP error! status: ${response.status}`);
@@ -79,13 +84,40 @@ class ApiService {
   }
 
   async removeOrderFromDrone(droneId, orderId) {
-    return this.request(`/drones/${droneId}/orders/${orderId}`, {
+    console.log(
+      `🔍 DEBUG - API calling DELETE /drones/${droneId}/orders/${orderId}`
+    );
+    const result = await this.request(`/drones/${droneId}/orders/${orderId}`, {
       method: "DELETE",
     });
+    console.log(`🔍 DEBUG - API result:`, result);
+    return result;
   }
 
   async calculateDroneRoute(id) {
     return this.request(`/drones/${id}/route`);
+  }
+
+  async ensureIdleDronesAreAtBase() {
+    return this.request("/drones/ensure-idle-at-base", {
+      method: "POST",
+    });
+  }
+
+  async startDroneFlight(droneId) {
+    return this.request(`/drones/${droneId}/start-flight`, {
+      method: "POST",
+    });
+  }
+
+  async getDeliveryTimeInfo(droneId) {
+    return this.request(`/drones/${droneId}/delivery-time`);
+  }
+
+  async stopDroneSimulation(droneId) {
+    return this.request(`/drones/${droneId}/stop-simulation`, {
+      method: "POST",
+    });
   }
 
   // Drone Types
@@ -322,6 +354,15 @@ class ApiService {
       method: "POST",
       body: JSON.stringify({ waypoints }),
     });
+  }
+
+  // Delivery Time Calculation
+  async calculateDeliveryTime(droneId, orderId) {
+    return this.request(`/routing/delivery-time/${droneId}/${orderId}`);
+  }
+
+  async calculateDroneDeliveryTimes(droneId) {
+    return this.request(`/routing/delivery-times/${droneId}`);
   }
 
   // Health Check

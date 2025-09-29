@@ -24,7 +24,7 @@ export class DroneModel {
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    return (data || []).map((drone) => this.formatDroneData(drone));
   }
 
   async findById(id) {
@@ -47,7 +47,7 @@ export class DroneModel {
       .single();
 
     if (error) throw error;
-    return data;
+    return this.formatDroneData(data);
   }
 
   async findBySerialNumber(serialNumber) {
@@ -58,7 +58,7 @@ export class DroneModel {
       .single();
 
     if (error && error.code !== "PGRST116") throw error;
-    return data;
+    return data ? this.formatDroneData(data) : null;
   }
 
   async findByTypeId(typeId) {
@@ -68,7 +68,7 @@ export class DroneModel {
       .eq("type_id", typeId);
 
     if (error) throw error;
-    return data || [];
+    return (data || []).map((drone) => this.formatDroneData(drone));
   }
 
   async create(droneData) {

@@ -116,4 +116,42 @@ export class RoutingController {
       });
     }
   }
+
+  async calculateDeliveryTime(req, res) {
+    try {
+      const { droneId, orderId } = req.params;
+      const deliveryTime = await this.routingService.calculateDeliveryTime(
+        droneId,
+        orderId
+      );
+
+      res.json({
+        success: true,
+        data: deliveryTime,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  async calculateDroneDeliveryTimes(req, res) {
+    try {
+      const { droneId } = req.params;
+      const deliveryTimes =
+        await this.routingService.calculateDroneDeliveryTimes(droneId);
+
+      res.json({
+        success: true,
+        data: deliveryTimes,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
 }

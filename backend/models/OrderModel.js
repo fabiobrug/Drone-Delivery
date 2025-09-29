@@ -53,7 +53,7 @@ export class OrderModel {
       .single();
 
     if (error) throw error;
-    return data;
+    return this.formatOrderData(data);
   }
 
   async findByDroneId(droneId) {
@@ -64,7 +64,7 @@ export class OrderModel {
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    return (data || []).map((order) => this.formatOrderData(order));
   }
 
   async findByStatus(status) {

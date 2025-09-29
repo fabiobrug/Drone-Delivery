@@ -33,6 +33,11 @@ router.put("/:id/status", validateDroneStatus, (req, res) =>
   droneController.updateDroneStatus(req, res)
 );
 
+// DELETE /api/drones/:id/orders/:orderId - Remover pedido do drone
+router.delete("/:id/orders/:orderId", (req, res) =>
+  droneController.removeOrderFromDrone(req, res)
+);
+
 // GET /api/drones/:id/orders - Pedidos do drone
 router.get("/:id/orders", (req, res) =>
   droneController.getDroneOrders(req, res)
@@ -43,14 +48,29 @@ router.post("/:id/orders", (req, res) =>
   droneController.allocateOrderToDrone(req, res)
 );
 
-// DELETE /api/drones/:id/orders/:orderId - Remover pedido do drone
-router.delete("/:id/orders/:orderId", (req, res) =>
-  droneController.removeOrderFromDrone(req, res)
-);
-
 // GET /api/drones/:id/route - Calcular rota do drone
 router.get("/:id/route", (req, res) =>
   droneController.calculateDroneRoute(req, res)
+);
+
+// POST /api/drones/ensure-idle-at-base - Garantir que drones IDLE estejam na base
+router.post("/ensure-idle-at-base", (req, res) =>
+  droneController.ensureIdleDronesAreAtBase(req, res)
+);
+
+// POST /api/drones/:id/start-flight - Iniciar voo do drone
+router.post("/:id/start-flight", (req, res) =>
+  droneController.startDroneFlight(req, res)
+);
+
+// GET /api/drones/:id/delivery-time - Obter informações de tempo de entrega
+router.get("/:id/delivery-time", (req, res) =>
+  droneController.getDeliveryTimeInfo(req, res)
+);
+
+// POST /api/drones/:id/stop-simulation - Parar simulação do drone
+router.post("/:id/stop-simulation", (req, res) =>
+  droneController.stopDroneSimulation(req, res)
 );
 
 export default router;

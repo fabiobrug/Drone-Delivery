@@ -66,8 +66,8 @@ export const validateDroneType = [
     .isFloat({ min: 0.1, max: 1000 })
     .withMessage("Capacity must be between 0.1 and 1000 kg"),
   body("batteryRange")
-    .isFloat({ min: 1, max: 1000 })
-    .withMessage("Battery range must be between 1 and 1000 km"),
+    .isFloat({ min: 1, max: 100 })
+    .withMessage("Battery range must be between 1 and 100 km"),
   body("maxSpeed")
     .isFloat({ min: 1, max: 500 })
     .withMessage("Max speed must be between 1 and 500 km/h"),
@@ -89,8 +89,8 @@ export const validateDroneTypeUpdate = [
     .withMessage("Capacity must be between 0.1 and 1000 kg"),
   body("batteryRange")
     .optional()
-    .isFloat({ min: 1, max: 1000 })
-    .withMessage("Battery range must be between 1 and 1000 km"),
+    .isFloat({ min: 1, max: 100 })
+    .withMessage("Battery range must be between 1 and 100 km"),
   body("maxSpeed")
     .optional()
     .isFloat({ min: 1, max: 500 })
@@ -105,11 +105,11 @@ export const validateDroneTypeUpdate = [
 // Validações para Pedidos
 export const validateOrder = [
   body("x")
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage("X coordinate must be between 0 and 1000"),
+    .isFloat({ min: 0, max: 50 })
+    .withMessage("X coordinate must be between 0 and 50"),
   body("y")
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage("Y coordinate must be between 0 and 1000"),
+    .isFloat({ min: 0, max: 50 })
+    .withMessage("Y coordinate must be between 0 and 50"),
   body("weight")
     .isFloat({ min: 0.1, max: 100 })
     .withMessage("Weight must be between 0.1 and 100 kg"),
@@ -123,12 +123,12 @@ export const validateOrder = [
 export const validateOrderUpdate = [
   body("x")
     .optional()
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage("X coordinate must be between 0 and 1000"),
+    .isFloat({ min: 0, max: 50 })
+    .withMessage("X coordinate must be between 0 and 50"),
   body("y")
     .optional()
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage("Y coordinate must be between 0 and 1000"),
+    .isFloat({ min: 0, max: 50 })
+    .withMessage("Y coordinate must be between 0 and 50"),
   body("weight")
     .optional()
     .isFloat({ min: 0.1, max: 100 })
@@ -161,12 +161,12 @@ export const validateNoFlyZone = [
     .withMessage("Points must be an array with at least 3 points"),
   body("points.*.x")
     .optional()
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage("Point X coordinate must be between 0 and 1000"),
+    .isFloat({ min: 0, max: 50 })
+    .withMessage("Point X coordinate must be between 0 and 50"),
   body("points.*.y")
     .optional()
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage("Point Y coordinate must be between 0 and 1000"),
+    .isFloat({ min: 0, max: 50 })
+    .withMessage("Point Y coordinate must be between 0 and 50"),
   handleValidationErrors,
 ];
 
@@ -175,11 +175,11 @@ export const validateNoFlyZonePoints = [
     .isArray({ min: 3 })
     .withMessage("Points must be an array with at least 3 points"),
   body("points.*.x")
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage("Point X coordinate must be between 0 and 1000"),
+    .isFloat({ min: 0, max: 50 })
+    .withMessage("Point X coordinate must be between 0 and 50"),
   body("points.*.y")
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage("Point Y coordinate must be between 0 and 1000"),
+    .isFloat({ min: 0, max: 50 })
+    .withMessage("Point Y coordinate must be between 0 and 50"),
   handleValidationErrors,
 ];
 
@@ -213,17 +213,17 @@ export const validateConfigUpdate = [
 // Validações para Roteamento
 export const validateRouteCalculation = [
   body("startX")
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage("Start X coordinate must be between 0 and 1000"),
+    .isFloat({ min: 0, max: 50 })
+    .withMessage("Start X coordinate must be between 0 and 50"),
   body("startY")
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage("Start Y coordinate must be between 0 and 1000"),
+    .isFloat({ min: 0, max: 50 })
+    .withMessage("Start Y coordinate must be between 0 and 50"),
   body("endX")
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage("End X coordinate must be between 0 and 1000"),
+    .isFloat({ min: 0, max: 50 })
+    .withMessage("End X coordinate must be between 0 and 50"),
   body("endY")
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage("End Y coordinate must be between 0 and 1000"),
+    .isFloat({ min: 0, max: 50 })
+    .withMessage("End Y coordinate must be between 0 and 50"),
   handleValidationErrors,
 ];
 

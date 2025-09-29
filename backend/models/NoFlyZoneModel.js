@@ -51,8 +51,7 @@ export class NoFlyZoneModel {
       .insert([
         {
           id: zoneData.id,
-          name: zoneData.name,
-          description: zoneData.description,
+          name: zoneData.name || `No-Fly Zone ${Date.now()}`,
         },
       ])
       .select()
@@ -72,8 +71,6 @@ export class NoFlyZoneModel {
     const updateFields = {};
 
     if (updateData.name !== undefined) updateFields.name = updateData.name;
-    if (updateData.description !== undefined)
-      updateFields.description = updateData.description;
 
     const { data, error } = await supabase
       .from(this.tableName)
@@ -98,10 +95,11 @@ export class NoFlyZoneModel {
   }
 
   async addPointsToZone(zoneId, points) {
-    const pointsData = points.map((point) => ({
+    const pointsData = points.map((point, index) => ({
       zone_id: zoneId,
       x: point.x,
       y: point.y,
+      point_order: index + 1,
     }));
 
     const { error } = await supabase
@@ -123,22 +121,34 @@ export class NoFlyZoneModel {
   }
 
   async checkPointInNoFlyZone(x, y) {
-    const { data, error } = await supabase
-      .from(this.pointsTableName)
-      .select(
-        `
-        zone_id,
-        no_fly_zones (
-          id,
-          name
-        )
-      `
-      )
-      .eq("x", x)
-      .eq("y", y);
+    // Usar a função do banco de dados para verificação mais eficiente
+    const { data, error } = await supabase.rpc("is_point_in_no_fly_zone", {
+      check_x: x,
+      check_y: y,
+    });
 
     if (error) throw error;
-    return data && data.length > 0;
+    return data === true;
+  }
+
+  async getNoFlyZonesForPoint(x, y) {
+    const { data, error } = await supabase.rpc("get_no_fly_zones_for_point", {
+      check_x: x,
+      check_y: y,
+    });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async getNoFlyZonesForPathfinding() {
+    const { data, error } = await supabase
+      .from(this.tableName)
+      .select("id, name, min_x, max_x, min_y, max_y, area")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
   }
 
   formatNoFlyZoneData(data) {
@@ -146,8 +156,8 @@ export class NoFlyZoneModel {
 
     return {
       id: data.id,
-      name: data.name,
-      description: data.description,
+      name: data.name || `No-Fly Zone ${data.id}`,
+      description: data.description || "",
       points: data.no_fly_zone_points
         ? data.no_fly_zone_points.map((point) => ({
             id: point.id,
@@ -155,6 +165,15 @@ export class NoFlyZoneModel {
             y: parseFloat(point.y),
           }))
         : [],
+      // Informações de área (se disponíveis)
+      area: data.area || 0,
+      minX: data.min_x || 0,
+      maxX: data.max_x || 0,
+      minY: data.min_y || 0,
+      maxY: data.max_y || 0,
+      width: data.width || 0,
+      height: data.height || 0,
+      cellCount: data.cell_count || 0,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };

@@ -35,4 +35,14 @@ router.post("/update-waypoints/:droneId", (req, res) =>
   routingController.updateDroneWaypoints(req, res)
 );
 
+// GET /api/routing/delivery-time/:droneId/:orderId - Calcular tempo de entrega
+router.get("/delivery-time/:droneId/:orderId", (req, res) =>
+  routingController.calculateDeliveryTime(req, res)
+);
+
+// GET /api/routing/delivery-times/:droneId - Calcular tempos de entrega do drone
+router.get("/delivery-times/:droneId", (req, res) =>
+  routingController.calculateDroneDeliveryTimes(req, res)
+);
+
 export default router;

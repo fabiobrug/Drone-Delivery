@@ -61,8 +61,8 @@ export class NoFlyZoneService {
       if (typeof point.x !== "number" || typeof point.y !== "number") {
         throw new Error("All points must have valid x and y coordinates");
       }
-      if (point.x < 0 || point.x > 1000 || point.y < 0 || point.y > 1000) {
-        throw new Error("Coordinates must be between 0 and 1000");
+      if (point.x < 0 || point.x > 50 || point.y < 0 || point.y > 50) {
+        throw new Error("Coordinates must be between 0 and 50");
       }
     }
 
@@ -80,25 +80,69 @@ export class NoFlyZoneService {
     return { success: true, message: "Points removed from zone successfully" };
   }
 
+  async getAllZonesForPathfinding() {
+    try {
+      const zones = await this.noFlyZoneModel.findAll();
+      return zones.map((zone) => {
+        // Calcular limites baseado nos pontos
+        const points = zone.points || [];
+        if (points.length === 0) {
+          return {
+            id: zone.id,
+            name: zone.name,
+            minX: 0,
+            maxX: 0,
+            minY: 0,
+            maxY: 0,
+            area: 0,
+          };
+        }
+
+        const minX = Math.min(...points.map((p) => p.x));
+        const maxX = Math.max(...points.map((p) => p.x));
+        const minY = Math.min(...points.map((p) => p.y));
+        const maxY = Math.max(...points.map((p) => p.y));
+        const area = (maxX - minX + 1) * (maxY - minY + 1);
+
+        return {
+          id: zone.id,
+          name: zone.name,
+          minX,
+          maxX,
+          minY,
+          maxY,
+          area,
+        };
+      });
+    } catch (error) {
+      console.error("Error getting zones for pathfinding:", error);
+      return [];
+    }
+  }
+
   async checkPointInNoFlyZone(x, y) {
     // Validar coordenadas
     if (typeof x !== "number" || typeof y !== "number") {
       throw new Error("Invalid coordinates");
     }
 
-    if (x < 0 || x > 1000 || y < 0 || y > 1000) {
-      throw new Error("Coordinates must be between 0 and 1000");
+    if (x < 0 || x > 50 || y < 0 || y > 50) {
+      throw new Error("Coordinates must be between 0 and 50");
     }
 
     return await this.noFlyZoneModel.checkPointInNoFlyZone(x, y);
   }
 
-  async getAllZonesForPathfinding() {
-    const zones = await this.getAllNoFlyZones();
-    return zones.map((zone) => ({
-      id: zone.id,
-      name: zone.name,
-      points: zone.points,
-    }));
+  async getNoFlyZonesForPoint(x, y) {
+    // Validar coordenadas
+    if (typeof x !== "number" || typeof y !== "number") {
+      throw new Error("Invalid coordinates");
+    }
+
+    if (x < 0 || x > 50 || y < 0 || y > 50) {
+      throw new Error("Coordinates must be between 0 and 50");
+    }
+
+    return await this.noFlyZoneModel.getNoFlyZonesForPoint(x, y);
   }
 }

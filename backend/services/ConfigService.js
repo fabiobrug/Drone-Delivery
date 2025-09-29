@@ -66,10 +66,10 @@ export class ConfigService {
       settings: {
         maxDrones: 50,
         maxOrders: 1000,
-        gridSize: 100,
+        gridSize: 50,
         cellSize: 20,
-        basePosition: { x: 50, y: 50 },
-        mapBounds: { minX: 0, minY: 0, maxX: 1000, maxY: 1000 },
+        basePosition: { x: 25, y: 25 },
+        mapBounds: { minX: 0, minY: 0, maxX: 50, maxY: 50 },
       },
     };
 

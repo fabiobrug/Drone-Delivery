@@ -57,6 +57,10 @@ export class DroneTypeModel {
       updateFields.max_speed = updateData.maxSpeed;
     if (updateData.description !== undefined)
       updateFields.description = updateData.description;
+    if (updateData.deliveredOrders !== undefined)
+      updateFields.delivered_orders = updateData.deliveredOrders;
+    if (updateData.totalOrders !== undefined)
+      updateFields.total_orders = updateData.totalOrders;
 
     const { data, error } = await supabase
       .from(this.tableName)
@@ -67,6 +71,29 @@ export class DroneTypeModel {
 
     if (error) throw error;
     return data;
+  }
+
+  async updateStats(id, deliveredCount) {
+    try {
+      // Primeiro, obter os dados atuais do tipo de drone
+      const currentData = await this.findById(id);
+      if (!currentData) {
+        throw new Error("Drone type not found");
+      }
+
+      // Atualizar estatísticas
+      const newDeliveredOrders =
+        (currentData.delivered_orders || 0) + deliveredCount;
+      const newTotalOrders = (currentData.total_orders || 0) + deliveredCount;
+
+      return await this.update(id, {
+        deliveredOrders: newDeliveredOrders,
+        totalOrders: newTotalOrders,
+      });
+    } catch (error) {
+      console.error("Error updating drone type stats:", error);
+      throw error;
+    }
   }
 
   async delete(id) {

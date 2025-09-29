@@ -3,13 +3,14 @@ import { useDroneContext } from "../../context/DroneContext";
 import { useNotification } from "../../context/NotificationContext";
 import api from "../../services/api";
 
-const DroneOrders = ({ droneId, onClose }) => {
+const DroneOrdersModal = ({ drone, isOpen, onClose }) => {
   const {
     orders,
     allocateOrderToDrone,
     removeOrderFromDrone,
     getDroneOrders,
-    drones,
+    calculateDeliveryOrder,
+    config,
   } = useDroneContext();
   const { showSuccess, showError } = useNotification();
   const [showAlert, setShowAlert] = useState(false);
@@ -20,33 +21,32 @@ const DroneOrders = ({ droneId, onClose }) => {
   const [loadingTimes, setLoadingTimes] = useState({});
 
   const availableOrders = orders.filter((order) => order.status === "pending");
-  const currentDrone = drones.find((d) => d.id === droneId);
 
   useEffect(() => {
     const loadDroneOrders = async () => {
-      try {
-        console.log("🔄 Loading drone orders for drone:", droneId);
-        setLoading(true);
-        const orders = await getDroneOrders(droneId);
-        console.log("📦 Drone orders loaded:", orders);
-        setDroneOrders(orders);
+      if (drone?.id && isOpen) {
+        try {
+          console.log("🔄 Loading drone orders for drone:", drone.id);
+          setLoading(true);
+          const orders = await getDroneOrders(drone.id);
+          console.log("📦 Drone orders loaded:", orders);
+          setDroneOrders(orders);
 
-        // Calcular tempos de entrega para os pedidos do drone
-        if (orders.length > 0) {
-          await loadDeliveryTimes(orders);
+          // Calcular tempos de entrega para os pedidos do drone
+          if (orders.length > 0) {
+            await loadDeliveryTimes(orders);
+          }
+        } catch (error) {
+          console.error("❌ Error loading drone orders:", error);
+          setDroneOrders([]);
+        } finally {
+          setLoading(false);
         }
-      } catch (error) {
-        console.error("❌ Error loading drone orders:", error);
-        setDroneOrders([]);
-      } finally {
-        setLoading(false);
       }
     };
 
-    if (droneId) {
-      loadDroneOrders();
-    }
-  }, [droneId, getDroneOrders]);
+    loadDroneOrders();
+  }, [drone?.id, isOpen, getDroneOrders]);
 
   const loadDeliveryTimes = async (orders) => {
     const times = {};
@@ -57,7 +57,7 @@ const DroneOrders = ({ droneId, onClose }) => {
       setLoadingTimes({ ...loading });
 
       try {
-        const response = await api.calculateDeliveryTime(droneId, order.id);
+        const response = await api.calculateDeliveryTime(drone.id, order.id);
         if (response.success) {
           times[order.id] = response.data;
         }
@@ -77,14 +77,14 @@ const DroneOrders = ({ droneId, onClose }) => {
   };
 
   const handleAllocateOrder = async (orderId) => {
-    console.log("🚀 Allocating order", orderId, "to drone", droneId);
-    const result = await allocateOrderToDrone(orderId, droneId);
+    console.log("🚀 Allocating order", orderId, "to drone", drone.id);
+    const result = await allocateOrderToDrone(orderId, drone.id);
     console.log("📋 Allocation result:", result);
 
     if (result.success) {
       // Recarregar pedidos do drone
       console.log("🔄 Reloading drone orders...");
-      const orders = await getDroneOrders(droneId);
+      const orders = await getDroneOrders(drone.id);
       setDroneOrders(orders);
       console.log("✅ Drone orders reloaded:", orders);
 
@@ -102,7 +102,7 @@ const DroneOrders = ({ droneId, onClose }) => {
 
   const handleRemoveOrder = async (orderId) => {
     console.log(
-      `🔍 DEBUG - Frontend removing order ${orderId} from drone ${droneId}`
+      `🔍 DEBUG - Frontend removing order ${orderId} from drone ${drone.id}`
     );
 
     // Confirmar remoção
@@ -112,12 +112,12 @@ const DroneOrders = ({ droneId, onClose }) => {
       return;
     }
 
-    const result = await removeOrderFromDrone(orderId, droneId);
+    const result = await removeOrderFromDrone(orderId, drone.id);
     console.log(`🔍 DEBUG - Frontend result:`, result);
 
     if (result.success) {
       // Recarregar pedidos do drone
-      const orders = await getDroneOrders(droneId);
+      const orders = await getDroneOrders(drone.id);
       setDroneOrders(orders);
 
       // Mostrar notificação de sucesso
@@ -158,6 +158,13 @@ const DroneOrders = ({ droneId, onClose }) => {
     }
   };
 
+  const sortedOrders = calculateDeliveryOrder(
+    droneOrders,
+    config.deliveryPriority
+  );
+
+  if (!isOpen || !drone) return null;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
       <div className="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden my-8">
@@ -165,31 +172,26 @@ const DroneOrders = ({ droneId, onClose }) => {
         <div className="bg-gray-700 px-4 py-3 border-b border-gray-600 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-white">
-              Pedidos do Drone
+              Pedidos do Drone - {drone.serialNumber || `Drone ${drone.id}`}
             </h3>
-            {currentDrone && (
-              <div className="text-sm text-gray-300 mt-1">
-                Peso usado:{" "}
-                {Math.round((currentDrone.currentLoad || 0) * 100) / 100}kg /{" "}
-                {currentDrone.capacity}kg
-                <div className="w-full bg-gray-600 rounded-full h-2 mt-1">
-                  <div
-                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.max(
-                        0,
-                        Math.min(
-                          100,
-                          ((currentDrone.currentLoad || 0) /
-                            (currentDrone.capacity || 1)) *
-                            100
-                        )
-                      )}%`,
-                    }}
-                  ></div>
-                </div>
+            <div className="text-sm text-gray-300 mt-1">
+              Peso usado: {Math.round((drone.currentLoad || 0) * 100) / 100}kg /{" "}
+              {drone.capacity}kg
+              <div className="w-full bg-gray-600 rounded-full h-2 mt-1">
+                <div
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.max(
+                      0,
+                      Math.min(
+                        100,
+                        ((drone.currentLoad || 0) / (drone.capacity || 1)) * 100
+                      )
+                    )}%`,
+                  }}
+                ></div>
               </div>
-            )}
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -235,7 +237,7 @@ const DroneOrders = ({ droneId, onClose }) => {
           {/* Pedidos Atuais do Drone */}
           <div>
             <h4 className="text-md font-semibold text-white mb-3">
-              Pedidos Atuais
+              Pedidos Atuais ({droneOrders.length})
             </h4>
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {loading ? (
@@ -247,14 +249,14 @@ const DroneOrders = ({ droneId, onClose }) => {
                   Nenhum pedido alocado
                 </div>
               ) : (
-                droneOrders.map((order) => (
+                sortedOrders.map((order, index) => (
                   <div
                     key={order.id}
                     className="bg-gray-900 border border-gray-600 rounded-lg p-3"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="font-medium text-white">
-                        Pedido {order.id.split("-")[1]}
+                        #{index + 1} - Pedido {order.id.split("-")[1]}
                       </div>
                       <div
                         className={`px-2 py-1 rounded text-xs ${getPriorityColor(
@@ -332,7 +334,7 @@ const DroneOrders = ({ droneId, onClose }) => {
           {/* Pedidos Disponíveis */}
           <div>
             <h4 className="text-md font-semibold text-white mb-3">
-              Pedidos Disponíveis
+              Pedidos Disponíveis ({availableOrders.length})
             </h4>
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {availableOrders.length === 0 ? (
@@ -388,4 +390,4 @@ const DroneOrders = ({ droneId, onClose }) => {
   );
 };
 
-export default DroneOrders;
+export default DroneOrdersModal;

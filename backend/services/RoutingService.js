@@ -14,15 +14,15 @@ export class RoutingService {
     // Validar coordenadas
     if (
       startX < 0 ||
-      startX > 1000 ||
+      startX > 50 ||
       startY < 0 ||
-      startY > 1000 ||
+      startY > 50 ||
       endX < 0 ||
-      endX > 1000 ||
+      endX > 50 ||
       endY < 0 ||
-      endY > 1000
+      endY > 50
     ) {
-      throw new Error("Coordinates must be between 0 and 1000");
+      throw new Error("Coordinates must be between 0 and 50");
     }
 
     // Obter zonas de exclusão
@@ -42,6 +42,104 @@ export class RoutingService {
       start: { x: startX, y: startY },
       end: { x: endX, y: endY },
     };
+  }
+
+  // Calcular tempo de entrega baseado na velocidade do drone e distância
+  async calculateDeliveryTime(droneId, orderId, orderData = null) {
+    const drone = await this.droneModel.findById(droneId);
+    if (!drone) {
+      throw new Error("Drone not found");
+    }
+
+    let order;
+    if (orderData) {
+      // Usar dados do pedido fornecidos (para testes ou pedidos simulados)
+      order = orderData;
+    } else {
+      // Buscar pedido no banco de dados
+      order = await this.orderModel.findById(orderId);
+      if (!order) {
+        throw new Error("Order not found");
+      }
+    }
+
+    // Calcular rota do drone para o pedido
+    const route = await this.calculateRoute(drone.x, drone.y, order.x, order.y);
+
+    // Obter velocidade máxima do drone (em km/h)
+    const maxSpeed = drone.droneType?.maxSpeed || 30; // Velocidade padrão se não especificada
+
+    // Verificar se a velocidade é válida
+    if (!maxSpeed || maxSpeed <= 0) {
+      console.warn(`Velocidade inválida para drone ${droneId}: ${maxSpeed}`);
+      return {
+        droneId,
+        orderId,
+        distance: route.totalDistance,
+        maxSpeed: 30, // Usar velocidade padrão
+        timeInHours: 0,
+        timeInMinutes: 0,
+        timeFormatted: "N/A",
+        route: route.path,
+        waypoints: route.waypoints,
+        error: "Velocidade do drone não definida",
+      };
+    }
+
+    // Calcular tempo em horas
+    const distanceInKm = route.totalDistance / 1000; // Converter metros para km
+    const timeInHours = distanceInKm / maxSpeed;
+
+    // Converter para minutos e segundos
+    const totalMinutes = Math.floor(timeInHours * 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    const seconds = Math.floor((timeInHours * 3600) % 60);
+
+    return {
+      droneId,
+      orderId,
+      distance: route.totalDistance,
+      maxSpeed,
+      timeInHours: Math.round(timeInHours * 100) / 100,
+      timeInMinutes: totalMinutes,
+      timeFormatted: `${hours > 0 ? hours + "h " : ""}${minutes}m ${seconds}s`,
+      route: route.path,
+      waypoints: route.waypoints,
+    };
+  }
+
+  // Calcular tempo de entrega para todos os pedidos de um drone
+  async calculateDroneDeliveryTimes(droneId) {
+    const drone = await this.droneModel.findById(droneId);
+    if (!drone) {
+      throw new Error("Drone not found");
+    }
+
+    const orders = await this.orderModel.findByDroneId(droneId);
+    const deliveryTimes = [];
+
+    for (const order of orders) {
+      try {
+        const deliveryTime = await this.calculateDeliveryTime(
+          droneId,
+          order.id
+        );
+        deliveryTimes.push(deliveryTime);
+      } catch (error) {
+        console.error(
+          `Error calculating delivery time for order ${order.id}:`,
+          error
+        );
+        deliveryTimes.push({
+          droneId,
+          orderId: order.id,
+          error: error.message,
+        });
+      }
+    }
+
+    return deliveryTimes;
   }
 
   async calculateDroneRoute(droneId) {
@@ -163,9 +261,9 @@ export class RoutingService {
         typeof waypoint.x !== "number" ||
         typeof waypoint.y !== "number" ||
         waypoint.x < 0 ||
-        waypoint.x > 1000 ||
+        waypoint.x > 50 ||
         waypoint.y < 0 ||
-        waypoint.y > 1000
+        waypoint.y > 50
       ) {
         throw new Error("Invalid waypoint coordinates");
       }
@@ -219,9 +317,9 @@ export class RoutingService {
   }
 
   optimizeByDistance(drones, orders) {
-    // Ordenar pedidos por distância da base (50, 50)
-    const baseX = 50;
-    const baseY = 50;
+    // Ordenar pedidos por distância da base (25, 25)
+    const baseX = 25;
+    const baseY = 25;
 
     const sortedOrders = orders.sort((a, b) => {
       const distA = calculateDistance(baseX, baseY, a.x, a.y);
@@ -241,8 +339,8 @@ export class RoutingService {
   }
 
   optimizeByPriorityDistanceWeight(drones, orders) {
-    const baseX = 50;
-    const baseY = 50;
+    const baseX = 25;
+    const baseY = 25;
     const priorityWeight = { high: 3, medium: 2, low: 1 };
 
     // Calcular score para cada pedido

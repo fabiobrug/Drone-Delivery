@@ -10,6 +10,7 @@ const InteractiveMap = () => {
     addNoFlyZone,
     removeNoFlyZone,
     calculateDeliveryRoute,
+    loadInitialData,
   } = useDroneContext();
   const [selectedDrone, setSelectedDrone] = useState(null);
   const [animatingDrones, setAnimatingDrones] = useState(new Set());
@@ -22,6 +23,7 @@ const InteractiveMap = () => {
   const [isCreatingZone, setIsCreatingZone] = useState(false);
   const [isRemovingZone, setIsRemovingZone] = useState(false);
   const [zonePoints, setZonePoints] = useState([]);
+  const [selectedCells, setSelectedCells] = useState(new Set());
   const [deliveryRoute, setDeliveryRoute] = useState([]);
 
   const GRID_SIZE = 50;
@@ -283,6 +285,7 @@ const InteractiveMap = () => {
     setIsCreatingZone(!isCreatingZone);
     setIsRemovingZone(false);
     setZonePoints([]);
+    setSelectedCells(new Set());
     setSelectedDrone(null);
   };
 
@@ -290,10 +293,47 @@ const InteractiveMap = () => {
     setIsRemovingZone(!isRemovingZone);
     setIsCreatingZone(false);
     setZonePoints([]);
+    setSelectedCells(new Set());
     setSelectedDrone(null);
   };
 
-  const handleMapClick = (e) => {
+  const confirmZoneCreation = async () => {
+    if (selectedCells.size >= 3) {
+      const points = Array.from(selectedCells).map((cellKey) => {
+        const [x, y] = cellKey.split(",").map(Number);
+        return { x, y };
+      });
+
+      try {
+        // Criar a zona
+        const result = await addNoFlyZone({ points });
+
+        if (result.success) {
+          // Recarregar todos os dados do mapa para garantir que a zona apareça
+          await loadInitialData();
+
+          // Limpar estado de criação
+          setIsCreatingZone(false);
+          setZonePoints([]);
+          setSelectedCells(new Set());
+
+          console.log("✅ Zona criada e mapa recarregado com sucesso!");
+        } else {
+          console.error("❌ Erro ao criar zona:", result.error);
+        }
+      } catch (error) {
+        console.error("❌ Erro ao criar zona:", error);
+      }
+    }
+  };
+
+  const cancelZoneCreation = () => {
+    setIsCreatingZone(false);
+    setZonePoints([]);
+    setSelectedCells(new Set());
+  };
+
+  const handleMapClick = async (e) => {
     if (isCreatingZone && !isDragging) {
       const rect = mapRef.current.getBoundingClientRect();
       const x = Math.floor(
@@ -303,16 +343,33 @@ const InteractiveMap = () => {
         (e.clientY - rect.top - panOffset.y) / (CELL_SIZE * zoom)
       );
 
-      if (
-        zonePoints.length > 2 &&
-        zonePoints[0].x === x &&
-        zonePoints[0].y === y
-      ) {
-        addNoFlyZone({ points: zonePoints });
-        setIsCreatingZone(false);
-        setZonePoints([]);
+      // Verificar se as coordenadas estão dentro dos limites
+      if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) {
+        return;
+      }
+
+      const cellKey = `${x},${y}`;
+      const newSelectedCells = new Set(selectedCells);
+
+      if (newSelectedCells.has(cellKey)) {
+        // Se já está selecionado, deselecionar
+        newSelectedCells.delete(cellKey);
       } else {
-        setZonePoints([...zonePoints, { x, y }]);
+        // Se não está selecionado, adicionar
+        newSelectedCells.add(cellKey);
+      }
+
+      setSelectedCells(newSelectedCells);
+
+      // Se há pelo menos 3 células selecionadas, permitir criar a zona
+      if (newSelectedCells.size >= 3) {
+        const points = Array.from(newSelectedCells).map((cellKey) => {
+          const [x, y] = cellKey.split(",").map(Number);
+          return { x, y };
+        });
+        setZonePoints(points);
+      } else {
+        setZonePoints([]);
       }
     } else if (isRemovingZone && !isDragging) {
       const rect = mapRef.current.getBoundingClientRect();
@@ -332,8 +389,20 @@ const InteractiveMap = () => {
       });
 
       if (clickedZone) {
-        removeNoFlyZone(clickedZone.id);
-        setIsRemovingZone(false);
+        try {
+          const result = await removeNoFlyZone(clickedZone.id);
+
+          if (result.success) {
+            // Recarregar todos os dados do mapa para garantir que a zona seja removida
+            await loadInitialData();
+            setIsRemovingZone(false);
+            console.log("✅ Zona removida e mapa recarregado com sucesso!");
+          } else {
+            console.error("❌ Erro ao remover zona:", result.error);
+          }
+        } catch (error) {
+          console.error("❌ Erro ao remover zona:", error);
+        }
       }
     } else if (!isDragging) {
       setSelectedDrone(null);
@@ -387,13 +456,22 @@ const InteractiveMap = () => {
     for (let y = startY; y < endY; y++) {
       for (let x = startX; x < endX; x++) {
         const terrain = getTerrainType(x, y);
+        const cellKey = `${x},${y}`;
+        const isSelected = selectedCells.has(cellKey);
+
         cells.push(
           <div
             key={`${x}-${y}`}
             className={`border ${terrain.border} ${
               terrain.color
-            } hover:opacity-80 transition-opacity duration-150 ${
-              isCreatingZone ? "hover:bg-rose-300 hover:border-rose-400" : ""
+            } hover:opacity-80 transition-all duration-150 ${
+              isCreatingZone
+                ? "hover:bg-rose-300 hover:border-rose-400 cursor-crosshair"
+                : ""
+            } ${
+              isSelected
+                ? "bg-rose-500/50 border-rose-500 border-2 shadow-lg"
+                : ""
             }`}
             style={{
               width: cellSize,
@@ -402,7 +480,9 @@ const InteractiveMap = () => {
               left: x * cellSize + panOffset.x,
               top: y * cellSize + panOffset.y,
             }}
-            title={`${terrain.type} - (${x}, ${y})`}
+            title={`${terrain.type} - (${x}, ${y})${
+              isSelected ? " - Selecionado" : ""
+            }`}
           />
         );
       }
@@ -412,72 +492,159 @@ const InteractiveMap = () => {
 
   const renderNoFlyZones = () => {
     const cellSize = CELL_SIZE * zoom;
-    return noFlyZones.map((zone) => (
-      <div
-        key={zone.id}
-        className="absolute bg-rose-500/20 border-2 border-rose-500 border-dashed animate-pulse"
-        style={{
-          left:
-            Math.min(...zone.points.map((p) => p.x)) * cellSize + panOffset.x,
-          top:
-            Math.min(...zone.points.map((p) => p.y)) * cellSize + panOffset.y,
-          width:
-            (Math.max(...zone.points.map((p) => p.x)) -
-              Math.min(...zone.points.map((p) => p.x))) *
-            cellSize,
-          height:
-            (Math.max(...zone.points.map((p) => p.y)) -
-              Math.min(...zone.points.map((p) => p.y))) *
-            cellSize,
-        }}
-      />
-    ));
+
+    // Verificar se há zonas para renderizar
+    if (!noFlyZones || noFlyZones.length === 0) {
+      return null;
+    }
+
+    return noFlyZones.map((zone) => {
+      // Verificar se a zona tem pontos válidos
+      if (!zone.points || zone.points.length === 0) {
+        return null;
+      }
+
+      // Calcular área da zona
+      const minX = Math.min(...zone.points.map((p) => p.x));
+      const maxX = Math.max(...zone.points.map((p) => p.x));
+      const minY = Math.min(...zone.points.map((p) => p.y));
+      const maxY = Math.max(...zone.points.map((p) => p.y));
+
+      return (
+        <div key={zone.id} className="absolute">
+          {/* Área destacada da zona no-fly */}
+          <div
+            className="absolute bg-red-500/30 border-2 border-red-500 border-dashed shadow-2xl"
+            style={{
+              left: minX * cellSize + panOffset.x,
+              top: minY * cellSize + panOffset.y,
+              width: (maxX - minX + 1) * cellSize,
+              height: (maxY - minY + 1) * cellSize,
+            }}
+          />
+
+          {/* Overlay com padrão de proibição */}
+          <div
+            className="absolute bg-red-500/20"
+            style={{
+              left: minX * cellSize + panOffset.x,
+              top: minY * cellSize + panOffset.y,
+              width: (maxX - minX + 1) * cellSize,
+              height: (maxY - minY + 1) * cellSize,
+              backgroundImage: `repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(239, 68, 68, 0.3) 10px,
+                rgba(239, 68, 68, 0.3) 20px
+              )`,
+            }}
+          />
+
+          {/* Ícone discreto de proibição */}
+          <div
+            className="absolute flex items-center justify-center"
+            style={{
+              left: minX * cellSize + panOffset.x + 2,
+              top: minY * cellSize + panOffset.y + 2,
+              width: 16,
+              height: 16,
+            }}
+          >
+            <svg
+              className="w-4 h-4 text-red-500 drop-shadow-lg"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+            </svg>
+          </div>
+        </div>
+      );
+    });
   };
 
   // Zone creation rendering
   const renderZoneCreation = () => {
+    if (!isCreatingZone || selectedCells.size === 0) return null;
+
     const cellSize = CELL_SIZE * zoom;
+    const selectedCellsArray = Array.from(selectedCells);
+
     return (
       <>
-        {zonePoints.map((point, index) => (
+        {/* Mostrar células selecionadas */}
+        {selectedCellsArray.map((cellKey) => {
+          const [x, y] = cellKey.split(",").map(Number);
+          return (
+            <div
+              key={cellKey}
+              className="absolute bg-rose-600/70 border-2 border-rose-400 rounded shadow-lg animate-pulse"
+              style={{
+                left: x * cellSize + panOffset.x,
+                top: y * cellSize + panOffset.y,
+                width: cellSize,
+                height: cellSize,
+              }}
+            />
+          );
+        })}
+
+        {/* Mostrar área da zona se há pelo menos 3 células */}
+        {selectedCells.size >= 3 && (
           <div
-            key={index}
-            className="absolute bg-rose-600 border-2 border-rose-400 rounded-full shadow-lg"
+            className="absolute bg-rose-500/20 border-2 border-rose-500 border-dashed animate-pulse"
             style={{
-              left: point.x * cellSize + panOffset.x - 6,
-              top: point.y * cellSize + panOffset.y - 6,
-              width: 12,
-              height: 12,
+              left:
+                Math.min(
+                  ...selectedCellsArray.map((cellKey) => {
+                    const [x] = cellKey.split(",").map(Number);
+                    return x;
+                  })
+                ) *
+                  cellSize +
+                panOffset.x,
+              top:
+                Math.min(
+                  ...selectedCellsArray.map((cellKey) => {
+                    const [, y] = cellKey.split(",").map(Number);
+                    return y;
+                  })
+                ) *
+                  cellSize +
+                panOffset.y,
+              width:
+                (Math.max(
+                  ...selectedCellsArray.map((cellKey) => {
+                    const [x] = cellKey.split(",").map(Number);
+                    return x;
+                  })
+                ) -
+                  Math.min(
+                    ...selectedCellsArray.map((cellKey) => {
+                      const [x] = cellKey.split(",").map(Number);
+                      return x;
+                    })
+                  ) +
+                  1) *
+                cellSize,
+              height:
+                (Math.max(
+                  ...selectedCellsArray.map((cellKey) => {
+                    const [, y] = cellKey.split(",").map(Number);
+                    return y;
+                  })
+                ) -
+                  Math.min(
+                    ...selectedCellsArray.map((cellKey) => {
+                      const [, y] = cellKey.split(",").map(Number);
+                      return y;
+                    })
+                  ) +
+                  1) *
+                cellSize,
             }}
           />
-        ))}
-        {zonePoints.length > 1 && (
-          <svg
-            className="absolute pointer-events-none"
-            style={{
-              left: panOffset.x,
-              top: panOffset.y,
-              width: GRID_SIZE * cellSize,
-              height: GRID_SIZE * cellSize,
-            }}
-          >
-            {zonePoints.map((point, index) => {
-              if (index === 0) return null;
-              const prevPoint = zonePoints[index - 1];
-              return (
-                <line
-                  key={index}
-                  x1={prevPoint.x * cellSize}
-                  y1={prevPoint.y * cellSize}
-                  x2={point.x * cellSize}
-                  y2={point.y * cellSize}
-                  stroke="#ef4444"
-                  strokeWidth="3"
-                  strokeDasharray="6,6"
-                />
-              );
-            })}
-          </svg>
         )}
       </>
     );
@@ -528,76 +695,7 @@ const InteractiveMap = () => {
 
       return (
         <div key={drone.id} className="absolute">
-          {/* Enhanced flight path for flying drones */}
-          {drone.status === "flying" && drone.targetX && drone.targetY && (
-            <svg
-              className="absolute pointer-events-none z-10"
-              style={{
-                left: Math.min(drone.x, drone.targetX) * cellSize + panOffset.x,
-                top: Math.min(drone.y, drone.targetY) * cellSize + panOffset.y,
-                width: Math.abs(drone.targetX - drone.x) * cellSize,
-                height: Math.abs(drone.targetY - drone.y) * cellSize,
-              }}
-            >
-              <defs>
-                <linearGradient
-                  id={`gradient-${drone.id}`}
-                  x1="0%"
-                  y1="0%"
-                  x2="100%"
-                  y2="100%"
-                >
-                  <stop offset="0%" stopColor="#60A5FA" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.4" />
-                </linearGradient>
-              </defs>
-              <line
-                x1={(drone.x - Math.min(drone.x, drone.targetX)) * cellSize}
-                y1={(drone.y - Math.min(drone.y, drone.targetY)) * cellSize}
-                x2={
-                  (drone.targetX - Math.min(drone.x, drone.targetX)) * cellSize
-                }
-                y2={
-                  (drone.targetY - Math.min(drone.y, drone.targetY)) * cellSize
-                }
-                stroke={`url(#gradient-${drone.id})`}
-                strokeWidth="4"
-                strokeDasharray="12,8"
-                className="animate-pulse"
-                style={{
-                  animation: "dash 3s linear infinite",
-                }}
-              />
-              {/* Direction arrow */}
-              <polygon
-                points={`${
-                  (drone.targetX - Math.min(drone.x, drone.targetX)) *
-                    cellSize -
-                  8
-                },${
-                  (drone.targetY - Math.min(drone.y, drone.targetY)) *
-                    cellSize -
-                  4
-                } ${
-                  (drone.targetX - Math.min(drone.x, drone.targetX)) * cellSize
-                },${
-                  (drone.targetY - Math.min(drone.y, drone.targetY)) * cellSize
-                } ${
-                  (drone.targetX - Math.min(drone.x, drone.targetX)) *
-                    cellSize -
-                  8
-                },${
-                  (drone.targetY - Math.min(drone.y, drone.targetY)) *
-                    cellSize +
-                  4
-                }`}
-                fill="#60A5FA"
-                className="animate-pulse"
-              />
-            </svg>
-          )}
-
-          {/* Enhanced drone icon */}
+          {/* Enhanced drone icon with modern design */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -622,31 +720,113 @@ const InteractiveMap = () => {
                 setDeliveryRoute([]);
               }
             }}
-            className={`absolute flex items-center justify-center rounded-full border-3 transition-all duration-300 hover:scale-125 transform shadow-lg ${
+            className={`absolute flex items-center justify-center transition-all duration-300 hover:scale-125 transform shadow-2xl ${
               selectedDrone === drone.id ? "ring-4 ring-white/50 scale-125" : ""
-            } ${getDroneColor(drone.status)} ${
-              drone.status !== "idle" ? "animate-pulse" : ""
             } ${animatingDrones.has(drone.id) ? "animate-bounce" : ""}`}
             style={{
-              left: drone.x * cellSize + panOffset.x - 12,
-              top: drone.y * cellSize + panOffset.y - 12,
-              width: 24,
-              height: 24,
+              left: drone.x * cellSize + panOffset.x - 16,
+              top: drone.y * cellSize + panOffset.y - 16,
+              width: 32,
+              height: 32,
             }}
           >
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2L13.09 8.26L22 9L13.09 9.74L12 16L10.91 9.74L2 9L10.91 8.26L12 2Z" />
-            </svg>
-            {/* Battery indicator */}
+            {/* Main drone body with gradient */}
             <div
-              className={`absolute -top-1 -right-1 w-2 h-1 rounded-full ${
-                drone.battery > 50
+              className={`relative w-full h-full rounded-full border-2 shadow-inner ${
+                drone.status === "idle"
+                  ? "bg-gradient-to-br from-emerald-400 to-emerald-600 border-emerald-300"
+                  : drone.status === "loading"
+                  ? "bg-gradient-to-br from-amber-400 to-amber-600 border-amber-300"
+                  : drone.status === "flying"
+                  ? "bg-gradient-to-br from-sky-400 to-sky-600 border-sky-300"
+                  : "bg-gradient-to-br from-rose-400 to-rose-600 border-rose-300"
+              } ${drone.status !== "idle" ? "animate-pulse" : ""}`}
+            >
+              {/* Inner glow effect */}
+              <div className="absolute inset-1 bg-white/20 rounded-full"></div>
+
+              {/* Drone icon */}
+              <div className="relative z-10 flex items-center justify-center">
+                <svg
+                  className="w-5 h-5 text-white drop-shadow-lg"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M12 2L13.09 8.26L22 9L13.09 9.74L12 16L10.91 9.74L2 9L10.91 8.26L12 2Z" />
+                </svg>
+              </div>
+
+              {/* Rotating propellers for flying drones */}
+              {drone.status === "flying" && (
+                <>
+                  <div
+                    className="absolute -top-2 -left-1 w-1 h-1 bg-white/60 rounded-full animate-spin"
+                    style={{ animationDuration: "0.5s" }}
+                  ></div>
+                  <div
+                    className="absolute -top-2 -right-1 w-1 h-1 bg-white/60 rounded-full animate-spin"
+                    style={{
+                      animationDuration: "0.5s",
+                      animationDelay: "0.25s",
+                    }}
+                  ></div>
+                  <div
+                    className="absolute -bottom-2 -left-1 w-1 h-1 bg-white/60 rounded-full animate-spin"
+                    style={{
+                      animationDuration: "0.5s",
+                      animationDelay: "0.125s",
+                    }}
+                  ></div>
+                  <div
+                    className="absolute -bottom-2 -right-1 w-1 h-1 bg-white/60 rounded-full animate-spin"
+                    style={{
+                      animationDuration: "0.5s",
+                      animationDelay: "0.375s",
+                    }}
+                  ></div>
+                </>
+              )}
+
+              {/* Battery indicator */}
+              <div
+                className={`absolute -top-1 -right-1 w-3 h-2 rounded-full border border-white/50 ${
+                  drone.battery > 50
+                    ? "bg-emerald-400"
+                    : drone.battery > 20
+                    ? "bg-amber-400"
+                    : "bg-rose-400"
+                }`}
+              >
+                <div className="w-full h-full rounded-full bg-gradient-to-r from-transparent to-white/30"></div>
+              </div>
+
+              {/* Status indicator dot */}
+              <div
+                className={`absolute -bottom-1 -left-1 w-2 h-2 rounded-full border border-white/50 ${
+                  drone.status === "idle"
+                    ? "bg-emerald-500"
+                    : drone.status === "loading"
+                    ? "bg-amber-500"
+                    : drone.status === "flying"
+                    ? "bg-sky-500"
+                    : "bg-rose-500"
+                } ${drone.status !== "idle" ? "animate-ping" : ""}`}
+              ></div>
+            </div>
+
+            {/* Outer glow ring */}
+            <div
+              className={`absolute inset-0 rounded-full opacity-30 ${
+                drone.status === "idle"
                   ? "bg-emerald-400"
-                  : drone.battery > 20
+                  : drone.status === "loading"
                   ? "bg-amber-400"
+                  : drone.status === "flying"
+                  ? "bg-sky-400"
                   : "bg-rose-400"
-              }`}
-            />
+              } ${drone.status !== "idle" ? "animate-ping" : ""}`}
+              style={{ transform: "scale(1.5)" }}
+            ></div>
           </button>
 
           {/* Enhanced drone info tooltip */}
@@ -736,39 +916,77 @@ const InteractiveMap = () => {
       )
       .map((order) => (
         <div key={order.id} className="absolute">
-          {/* Delivery pin */}
+          {/* Enhanced Delivery pin with better visibility */}
           <div
-            className={`absolute flex items-center justify-center transition-all duration-300 hover:scale-110 ${getOrderColor(
-              order.priority
-            )} ${order.priority === "high" ? "animate-pulse" : ""} shadow-lg`}
+            className={`absolute flex items-center justify-center transition-all duration-300 hover:scale-125 transform shadow-2xl border-2 ${
+              order.priority === "high"
+                ? "bg-gradient-to-br from-red-500 to-red-700 border-red-300 text-white animate-pulse"
+                : order.priority === "medium"
+                ? "bg-gradient-to-br from-yellow-500 to-yellow-700 border-yellow-300 text-black"
+                : "bg-gradient-to-br from-green-500 to-green-700 border-green-300 text-white"
+            } rounded-full`}
             style={{
-              left: order.x * cellSize + panOffset.x - 8,
-              top: order.y * cellSize + panOffset.y - 16,
-              width: 16,
-              height: 20,
+              left: order.x * cellSize + panOffset.x - 12,
+              top: order.y * cellSize + panOffset.y - 24,
+              width: 24,
+              height: 24,
             }}
             title={`Pedido ${order.id} - ${order.weight}kg - Prioridade ${order.priority}`}
           >
-            {/* Pin shape */}
-            <svg className="w-4 h-5" fill="currentColor" viewBox="0 0 24 24">
+            {/* Enhanced pin icon */}
+            <svg className="w-5 h-6" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
             </svg>
           </div>
 
-          {/* Priority indicator */}
+          {/* Enhanced Priority indicator with glow effect */}
           <div
-            className={`absolute w-2 h-2 rounded-full ${
+            className={`absolute w-3 h-3 rounded-full border-2 border-white shadow-lg ${
               order.priority === "high"
-                ? "bg-rose-400 animate-ping"
+                ? "bg-red-500 animate-ping"
                 : order.priority === "medium"
-                ? "bg-amber-400"
-                : "bg-emerald-400"
+                ? "bg-yellow-500"
+                : "bg-green-500"
             }`}
             style={{
-              left: order.x * cellSize + panOffset.x + 6,
-              top: order.y * cellSize + panOffset.y - 18,
+              left: order.x * cellSize + panOffset.x + 8,
+              top: order.y * cellSize + panOffset.y - 20,
             }}
           />
+
+          {/* Priority text label */}
+          <div
+            className={`absolute text-xs font-bold px-2 py-1 rounded-full border ${
+              order.priority === "high"
+                ? "bg-red-600 text-white border-red-400"
+                : order.priority === "medium"
+                ? "bg-yellow-600 text-black border-yellow-400"
+                : "bg-green-600 text-white border-green-400"
+            } shadow-lg`}
+            style={{
+              left: order.x * cellSize + panOffset.x - 20,
+              top: order.y * cellSize + panOffset.y - 40,
+              fontSize: "10px",
+            }}
+          >
+            {order.priority === "high"
+              ? "ALTA"
+              : order.priority === "medium"
+              ? "MÉDIA"
+              : "BAIXA"}
+          </div>
+
+          {/* Order weight indicator */}
+          <div
+            className="absolute bg-slate-800 text-white text-xs px-2 py-1 rounded-full border border-slate-600 shadow-lg font-semibold"
+            style={{
+              left: order.x * cellSize + panOffset.x - 15,
+              top: order.y * cellSize + panOffset.y + 5,
+              fontSize: "9px",
+            }}
+          >
+            {order.weight}kg
+          </div>
         </div>
       ));
   };
@@ -852,26 +1070,51 @@ const InteractiveMap = () => {
             <div className="text-sm text-slate-400 bg-slate-700 px-3 py-1 rounded-full">
               Zoom: {Math.round(zoom * 100)}%
             </div>
-            <button
-              onClick={toggleZoneCreation}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                isCreatingZone
-                  ? "bg-rose-600 hover:bg-rose-700 text-white shadow-lg"
-                  : "bg-slate-600 hover:bg-slate-700 text-white"
-              }`}
-            >
-              {isCreatingZone ? "Cancelar Zona" : "Criar Zona"}
-            </button>
-            <button
-              onClick={toggleZoneRemoval}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                isRemovingZone
-                  ? "bg-amber-600 hover:bg-amber-700 text-white shadow-lg"
-                  : "bg-slate-600 hover:bg-slate-700 text-white"
-              }`}
-            >
-              {isRemovingZone ? "Cancelar Remoção" : "Remover Zona"}
-            </button>
+
+            {isCreatingZone ? (
+              <>
+                <div className="text-sm text-rose-300 bg-rose-900/50 px-3 py-1 rounded-full border border-rose-500">
+                  Selecionadas: {selectedCells.size} células
+                </div>
+                <button
+                  onClick={confirmZoneCreation}
+                  disabled={selectedCells.size < 3}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    selectedCells.size >= 3
+                      ? "bg-green-600 hover:bg-green-700 text-white shadow-lg"
+                      : "bg-gray-500 text-gray-300 cursor-not-allowed"
+                  }`}
+                >
+                  Confirmar Zona ({selectedCells.size >= 3 ? "✓" : "✗"})
+                </button>
+                <button
+                  onClick={cancelZoneCreation}
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg"
+                >
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={toggleZoneCreation}
+                  className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg"
+                >
+                  Criar Zona
+                </button>
+                <button
+                  onClick={toggleZoneRemoval}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    isRemovingZone
+                      ? "bg-amber-600 hover:bg-amber-700 text-white shadow-lg"
+                      : "bg-slate-600 hover:bg-slate-700 text-white"
+                  }`}
+                >
+                  {isRemovingZone ? "Cancelar Remoção" : "Remover Zona"}
+                </button>
+              </>
+            )}
+
             <button
               onClick={resetView}
               className="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg"
@@ -905,15 +1148,15 @@ const InteractiveMap = () => {
           <div className="space-y-1">
             <div className="font-semibold text-slate-300 mb-1">Entregas</div>
             <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-emerald-300 rounded-full"></div>
+              <div className="w-3 h-3 bg-green-500 rounded-full border border-green-300"></div>
               <span className="text-slate-300">Baixa</span>
             </div>
             <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-amber-400 rounded-full"></div>
+              <div className="w-3 h-3 bg-yellow-500 rounded-full border border-yellow-300"></div>
               <span className="text-slate-300">Média</span>
             </div>
             <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-rose-400 rounded-full"></div>
+              <div className="w-3 h-3 bg-red-500 rounded-full border border-red-300 animate-pulse"></div>
               <span className="text-slate-300">Alta</span>
             </div>
           </div>
@@ -953,9 +1196,19 @@ const InteractiveMap = () => {
           <div className="space-y-1">
             <div className="font-semibold text-slate-300 mb-1">Status</div>
             {isCreatingZone && (
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-rose-600 rounded-full animate-pulse"></div>
-                <span className="text-rose-300">Criando Zona</span>
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 bg-rose-600 rounded-full animate-pulse"></div>
+                  <span className="text-rose-300">Criando Zona</span>
+                </div>
+                <div className="text-xs text-rose-200 ml-5">
+                  Clique nos quadrados para selecionar
+                </div>
+                {selectedCells.size > 0 && (
+                  <div className="text-xs text-rose-200 ml-5">
+                    {selectedCells.size} células selecionadas
+                  </div>
+                )}
               </div>
             )}
             {isRemovingZone && (

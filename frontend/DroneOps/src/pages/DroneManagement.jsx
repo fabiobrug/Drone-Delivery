@@ -8,9 +8,12 @@ import {
   CogIcon,
   BoltIcon,
   MapPinIcon,
+  PencilIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
-import DroneOrders from "../components/features/DroneOrders";
 import DroneDeliveryInfo from "../components/features/DroneDeliveryInfo";
+import ConfirmationModal from "../components/ui/ConfirmationModal";
+import api from "../services/api";
 
 const DroneManagement = () => {
   const {
@@ -21,11 +24,14 @@ const DroneManagement = () => {
     addDroneType,
     updateDroneStatus,
     deleteDrone,
+    refreshDrones,
+    refreshOrders,
   } = useDroneContext();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showTypeForm, setShowTypeForm] = useState(false);
-  const [selectedDroneForOrders, setSelectedDroneForOrders] = useState(null);
   const [selectedDroneForStatus, setSelectedDroneForStatus] = useState(null);
+  const [selectedDroneForEdit, setSelectedDroneForEdit] = useState(null);
+  const [showEditForm, setShowEditForm] = useState(false);
   const [newDroneType, setNewDroneType] = useState({
     name: "",
     capacity: 5,
@@ -36,8 +42,21 @@ const DroneManagement = () => {
   const [newDrone, setNewDrone] = useState({
     serialNumber: "",
     typeId: "",
-    x: 5,
-    y: 5,
+    x: 25,
+    y: 25,
+  });
+  const [editDrone, setEditDrone] = useState({
+    serialNumber: "",
+    typeId: "",
+    x: 25,
+    y: 25,
+  });
+  const [confirmationModal, setConfirmationModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    type: "warning",
+    onConfirm: null,
   });
 
   const getStatusColor = (status) => {
@@ -91,11 +110,60 @@ const DroneManagement = () => {
     e.preventDefault();
     const result = await addDrone(newDrone);
     if (result.success) {
-      setNewDrone({ serialNumber: "", typeId: "", x: 5, y: 5 });
+      setNewDrone({ serialNumber: "", typeId: "", x: 25, y: 25 });
       setShowCreateForm(false);
     } else {
       alert(`Erro ao criar drone: ${result.error}`);
     }
+  };
+
+  const handleEditDrone = async (e) => {
+    e.preventDefault();
+    const result = await updateDrone(selectedDroneForEdit, editDrone);
+    if (result.success) {
+      setEditDrone({ serialNumber: "", typeId: "", x: 25, y: 25 });
+      setShowEditForm(false);
+      setSelectedDroneForEdit(null);
+    } else {
+      alert(`Erro ao editar drone: ${result.error}`);
+    }
+  };
+
+  const handleDeleteDrone = async (droneId) => {
+    const drone = drones.find((d) => d.id === droneId);
+    setConfirmationModal({
+      isOpen: true,
+      title: "Confirmar Exclusão",
+      message: `Tem certeza que deseja excluir o drone ${
+        drone?.serialNumber || droneId
+      }?`,
+      type: "warning",
+      onConfirm: async () => {
+        const result = await deleteDrone(droneId);
+        if (!result.success) {
+          setConfirmationModal({
+            isOpen: true,
+            title: "Erro",
+            message: `Erro ao excluir drone: ${result.error}`,
+            type: "error",
+            onConfirm: () =>
+              setConfirmationModal({ ...confirmationModal, isOpen: false }),
+          });
+        }
+        setConfirmationModal({ ...confirmationModal, isOpen: false });
+      },
+    });
+  };
+
+  const openEditForm = (drone) => {
+    setEditDrone({
+      serialNumber: drone.serialNumber,
+      typeId: drone.typeId,
+      x: drone.x,
+      y: drone.y,
+    });
+    setSelectedDroneForEdit(drone.id);
+    setShowEditForm(true);
   };
 
   return (
@@ -219,9 +287,11 @@ const DroneManagement = () => {
                       </div>
                       <div>
                         <div className="text-sm font-medium text-white">
-                          {drone.serialNumber}
+                          {drone.serialNumber || `Drone ${drone.id}`}
                         </div>
-                        <div className="text-sm text-gray-400">{drone.id}</div>
+                        <div className="text-sm text-gray-400">
+                          ID: {drone.id}
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -258,7 +328,8 @@ const DroneManagement = () => {
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div className="text-sm text-white">
-                      {drone.currentLoad || 0}kg / {drone.capacity}kg
+                      {Math.round((drone.currentLoad || 0) * 100) / 100}kg /{" "}
+                      {drone.capacity}kg
                     </div>
                     <div className="w-16 bg-gray-600 rounded-full h-1 mt-1">
                       <div
@@ -266,7 +337,12 @@ const DroneManagement = () => {
                         style={{
                           width: `${Math.max(
                             0,
-                            ((drone.currentLoad || 0) / drone.capacity) * 100
+                            Math.min(
+                              100,
+                              ((drone.currentLoad || 0) /
+                                (drone.capacity || 1)) *
+                                100
+                            )
                           )}%`,
                         }}
                       />
@@ -279,24 +355,87 @@ const DroneManagement = () => {
                     </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedDroneForStatus(drone.id);
-                      }}
-                      className="text-blue-400 hover:text-blue-300 mr-3"
-                    >
-                      Configurar
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedDroneForOrders(drone.id);
-                      }}
-                      className="text-purple-400 hover:text-purple-300"
-                    >
-                      Pedidos
-                    </button>
+                    <div className="flex space-x-2">
+                      {/* Botão Fly */}
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            const result = await api.startDroneFlight(drone.id);
+                            if (result.success) {
+                              // Atualizar a lista de drones e pedidos
+                              await refreshDrones();
+                              await refreshOrders();
+                            } else {
+                              alert(`Erro ao iniciar voo: ${result.message}`);
+                            }
+                          } catch (error) {
+                            console.error(
+                              "Error starting drone flight:",
+                              error
+                            );
+                            alert("Erro ao iniciar voo do drone");
+                          }
+                        }}
+                        disabled={
+                          drone.status === "flying" ||
+                          drone.status === "returning" ||
+                          drone.currentLoad === 0
+                        }
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${
+                          drone.status === "flying" ||
+                          drone.status === "returning"
+                            ? "bg-gray-600 text-gray-400 cursor-not-allowed"
+                            : drone.currentLoad === 0
+                            ? "bg-gray-600 text-gray-400 cursor-not-allowed"
+                            : "bg-blue-600 hover:bg-blue-700 text-white"
+                        }`}
+                        title={
+                          drone.currentLoad === 0
+                            ? "Drone precisa ter pedidos para voar"
+                            : drone.status === "flying" ||
+                              drone.status === "returning"
+                            ? "Drone já está voando"
+                            : "Iniciar voo do drone"
+                        }
+                      >
+                        {drone.status === "flying" ||
+                        drone.status === "returning"
+                          ? "Voando"
+                          : "Fly"}
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDroneForStatus(drone.id);
+                        }}
+                        className="text-blue-400 hover:text-blue-300"
+                        title="Configurar Status"
+                      >
+                        <CogIcon className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditForm(drone);
+                        }}
+                        className="text-yellow-400 hover:text-yellow-300"
+                        title="Editar Drone"
+                      >
+                        <PencilIcon className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteDrone(drone.id);
+                        }}
+                        className="text-red-400 hover:text-red-300"
+                        title="Excluir Drone"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -414,6 +553,101 @@ const DroneManagement = () => {
         </div>
       )}
 
+      {/* Edit Drone Modal */}
+      {showEditForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md my-8">
+            <h3 className="text-xl font-semibold text-white mb-4">
+              Editar Drone
+            </h3>
+            <form onSubmit={handleEditDrone} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Número de Série
+                </label>
+                <input
+                  type="text"
+                  value={editDrone.serialNumber}
+                  onChange={(e) =>
+                    setEditDrone({ ...editDrone, serialNumber: e.target.value })
+                  }
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Tipo de Drone
+                </label>
+                <select
+                  value={editDrone.typeId}
+                  onChange={(e) =>
+                    setEditDrone({ ...editDrone, typeId: e.target.value })
+                  }
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white"
+                  required
+                >
+                  <option value="">Selecione um tipo</option>
+                  {droneTypes.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.name} - {type.capacity}kg
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Posição X
+                  </label>
+                  <input
+                    type="number"
+                    value={editDrone.x}
+                    onChange={(e) =>
+                      setEditDrone({ ...editDrone, x: Number(e.target.value) })
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Posição Y
+                  </label>
+                  <input
+                    type="number"
+                    value={editDrone.y}
+                    onChange={(e) =>
+                      setEditDrone({ ...editDrone, y: Number(e.target.value) })
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  type="submit"
+                  className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white py-2 px-4 rounded-lg transition-colors"
+                >
+                  Salvar Alterações
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditForm(false);
+                    setSelectedDroneForEdit(null);
+                  }}
+                  className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Create Drone Modal */}
       {showCreateForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
@@ -506,14 +740,6 @@ const DroneManagement = () => {
         </div>
       )}
 
-      {/* Modal de Pedidos */}
-      {selectedDroneForOrders && (
-        <DroneOrders
-          droneId={selectedDroneForOrders}
-          onClose={() => setSelectedDroneForOrders(null)}
-        />
-      )}
-
       {/* Modal de Configuração de Status */}
       {selectedDroneForStatus && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
@@ -596,6 +822,18 @@ const DroneManagement = () => {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmationModal.isOpen}
+        onClose={() =>
+          setConfirmationModal({ ...confirmationModal, isOpen: false })
+        }
+        onConfirm={confirmationModal.onConfirm}
+        title={confirmationModal.title}
+        message={confirmationModal.message}
+        type={confirmationModal.type}
+      />
     </div>
   );
 };

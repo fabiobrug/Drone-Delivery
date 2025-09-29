@@ -5,9 +5,12 @@ export const generateId = (prefix) => {
   return `${prefix}-${timestamp}-${random}`;
 };
 
-// Calcular distância entre dois pontos
+// Calcular distância entre dois pontos (em metros)
 export const calculateDistance = (x1, y1, x2, y2) => {
-  return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+  const distanceInUnits = Math.sqrt(
+    Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2)
+  );
+  return distanceInUnits * 100; // Converter de unidades para metros (1 unidade = 100m)
 };
 
 // Verificar se um ponto está dentro de um polígono
@@ -37,15 +40,31 @@ export const calculateAStarPath = (
   endX,
   endY,
   noFlyZones,
-  gridSize = 100
+  gridSize = 50
 ) => {
   const path = [];
 
   // Função para verificar se uma posição está em uma zona de exclusão
   const isInNoFlyZone = (x, y) => {
     return noFlyZones.some((zone) => {
-      const points = zone.points;
-      return isPointInPolygon({ x, y }, points);
+      // Usar as informações de área se disponíveis (método mais eficiente)
+      if (
+        zone.minX !== undefined &&
+        zone.maxX !== undefined &&
+        zone.minY !== undefined &&
+        zone.maxY !== undefined
+      ) {
+        return (
+          x >= zone.minX && x <= zone.maxX && y >= zone.minY && y <= zone.maxY
+        );
+      }
+
+      // Fallback para verificação por pontos (método antigo)
+      if (zone.points && zone.points.length > 0) {
+        return isPointInPolygon({ x, y }, zone.points);
+      }
+
+      return false;
     });
   };
 
@@ -189,7 +208,7 @@ export const formatSuccess = (data, message = "Success") => {
 };
 
 // Validar coordenadas
-export const validateCoordinates = (x, y, maxX = 1000, maxY = 1000) => {
+export const validateCoordinates = (x, y, maxX = 50, maxY = 50) => {
   return x >= 0 && x <= maxX && y >= 0 && y <= maxY;
 };
 

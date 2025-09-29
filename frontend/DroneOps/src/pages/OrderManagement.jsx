@@ -1,12 +1,15 @@
 "use client";
 
 import React from "react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useDroneContext } from "../context/DroneContext";
 import { PlusIcon, FunnelIcon } from "@heroicons/react/24/outline";
+import ConfirmationModal from "../components/ui/ConfirmationModal";
+import api from "../services/api";
 
 const OrderManagement = () => {
-  const { orders, addOrder, deleteOrder } = useDroneContext();
+  const { orders, addOrder, deleteOrder, drones, droneTypes, refreshOrders } =
+    useDroneContext();
   const [showForm, setShowForm] = useState(false);
   const [sortBy, setSortBy] = useState("createdAt");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -16,6 +19,67 @@ const OrderManagement = () => {
     weight: "",
     priority: "medium",
   });
+  const [confirmationModal, setConfirmationModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    type: "warning",
+    onConfirm: null,
+  });
+
+  // Atualizar pedidos automaticamente a cada 10 segundos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshOrders();
+    }, 10000); // 10 segundos
+
+    return () => clearInterval(interval);
+  }, [refreshOrders]);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [deliveryTime, setDeliveryTime] = useState(null);
+  const [loadingDeliveryTime, setLoadingDeliveryTime] = useState(false);
+
+  // Calcular peso máximo suportado por QUALQUER drone (independente do status)
+  const maxWeight = useMemo(() => {
+    if (droneTypes.length === 0) {
+      return 0;
+    }
+
+    // Buscar a maior capacidade entre todos os tipos de drones
+    const maxCapacity = Math.max(
+      ...droneTypes.map((type) => type.capacity || 0)
+    );
+
+    return maxCapacity;
+  }, [droneTypes]);
+
+  const calculateDeliveryTime = async (order) => {
+    if (!order.droneId) {
+      setDeliveryTime({ error: "Pedido não alocado a nenhum drone" });
+      return;
+    }
+
+    setLoadingDeliveryTime(true);
+    try {
+      const response = await api.calculateDeliveryTime(order.droneId, order.id);
+      if (response.success) {
+        setDeliveryTime(response.data);
+      } else {
+        setDeliveryTime({ error: "Erro ao calcular tempo de entrega" });
+      }
+    } catch (error) {
+      console.error("Error calculating delivery time:", error);
+      setDeliveryTime({ error: "Erro ao calcular tempo de entrega" });
+    } finally {
+      setLoadingDeliveryTime(false);
+    }
+  };
+
+  const handleOrderClick = (order) => {
+    setSelectedOrder(order);
+    setDeliveryTime(null);
+    calculateDeliveryTime(order);
+  };
 
   const filteredAndSortedOrders = useMemo(() => {
     let filtered = orders;
@@ -55,29 +119,21 @@ const OrderManagement = () => {
       if (result.success) {
         setFormData({ x: "", y: "", weight: "", priority: "medium" });
         setShowForm(false);
-      } else if (result.requiresConfirmation) {
-        const confirmed = window.confirm(
-          `${result.error}\n\nClique OK para aceitar o pedido mesmo assim.`
-        );
-        if (confirmed) {
-          // Criar o pedido mesmo sem drones disponíveis
-          const confirmResult = await addOrder({
-            x: Number.parseInt(formData.x),
-            y: Number.parseInt(formData.y),
-            weight: Number.parseFloat(formData.weight),
-            priority: formData.priority,
-            forceCreate: true, // Flag para forçar criação
-          });
-
-          if (confirmResult.success) {
-            setFormData({ x: "", y: "", weight: "", priority: "medium" });
-            setShowForm(false);
-          } else {
-            alert(`Erro ao criar pedido: ${confirmResult.error}`);
-          }
-        }
       } else {
-        alert(`Erro ao criar pedido: ${result.error}`);
+        setConfirmationModal({
+          isOpen: true,
+          title: "Erro",
+          message: result.error,
+          type: "error",
+          onConfirm: () =>
+            setConfirmationModal({
+              isOpen: false,
+              title: "",
+              message: "",
+              type: "warning",
+              onConfirm: null,
+            }),
+        });
       }
     }
   };
@@ -200,18 +256,22 @@ const OrderManagement = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Peso (kg)
+                Peso (kg) {maxWeight > 0 && `(máximo: ${maxWeight}kg)`}
               </label>
               <input
                 type="number"
                 step="0.1"
                 min="0.1"
+                max={maxWeight > 0 ? maxWeight : undefined}
                 value={formData.weight}
                 onChange={(e) =>
                   setFormData({ ...formData, weight: e.target.value })
                 }
                 className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
+                placeholder={
+                  maxWeight > 0 ? `0.1 - ${maxWeight}kg` : "Digite o peso"
+                }
               />
             </div>
             <div>
@@ -319,8 +379,9 @@ const OrderManagement = () => {
               {filteredAndSortedOrders.map((order, index) => (
                 <tr
                   key={order.id}
-                  className="hover:bg-gray-750 transition-all duration-200 animate-slideInRight"
+                  className="hover:bg-gray-750 transition-all duration-200 animate-slideInRight cursor-pointer"
                   style={{ animationDelay: `${index * 50}ms` }}
+                  onClick={() => handleOrderClick(order)}
                 >
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                     {order.id}
@@ -357,15 +418,48 @@ const OrderManagement = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button
                       onClick={() => {
-                        if (
-                          window.confirm(
-                            `Tem certeza que deseja excluir o pedido ${order.id}?`
-                          )
-                        ) {
-                          deleteOrder(order.id);
-                        }
+                        setConfirmationModal({
+                          isOpen: true,
+                          title: "Confirmar Exclusão",
+                          message: `Tem certeza que deseja excluir o pedido ${order.id}?`,
+                          type: "warning",
+                          onConfirm: async () => {
+                            console.log(`🗑️ Deleting order: ${order.id}`);
+                            const result = await deleteOrder(order.id);
+                            console.log(`📋 Delete result:`, result);
+
+                            if (!result.success) {
+                              setConfirmationModal({
+                                isOpen: true,
+                                title: "Erro",
+                                message: `Erro ao excluir pedido: ${result.error}`,
+                                type: "error",
+                                onConfirm: () =>
+                                  setConfirmationModal({
+                                    isOpen: false,
+                                    title: "",
+                                    message: "",
+                                    type: "warning",
+                                    onConfirm: null,
+                                  }),
+                              });
+                            } else {
+                              console.log(
+                                `✅ Order ${order.id} deleted successfully`
+                              );
+                              setConfirmationModal({
+                                isOpen: false,
+                                title: "",
+                                message: "",
+                                type: "warning",
+                                onConfirm: null,
+                              });
+                            }
+                          },
+                        });
                       }}
-                      className="text-red-400 hover:text-red-300"
+                      className="text-red-400 hover:text-red-300 transition-colors"
+                      title="Excluir Pedido"
                     >
                       🗑️
                     </button>
@@ -382,6 +476,136 @@ const OrderManagement = () => {
           </div>
         )}
       </div>
+
+      {/* Order Details Modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-md mx-4">
+            <div className="bg-gray-700 px-4 py-3 border-b border-gray-600 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">
+                Detalhes do Pedido
+              </h3>
+              <button
+                onClick={() => {
+                  setSelectedOrder(null);
+                  setDeliveryTime(null);
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div>
+                <div className="text-sm text-gray-400">ID do Pedido</div>
+                <div className="text-white font-medium">{selectedOrder.id}</div>
+              </div>
+
+              <div>
+                <div className="text-sm text-gray-400">Coordenadas</div>
+                <div className="text-white">
+                  ({selectedOrder.x}, {selectedOrder.y})
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm text-gray-400">Peso</div>
+                <div className="text-white">{selectedOrder.weight} kg</div>
+              </div>
+
+              <div>
+                <div className="text-sm text-gray-400">Prioridade</div>
+                <span
+                  className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(
+                    selectedOrder.priority
+                  )}`}
+                >
+                  {getPriorityText(selectedOrder.priority)}
+                </span>
+              </div>
+
+              <div>
+                <div className="text-sm text-gray-400">Status</div>
+                <span
+                  className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
+                    selectedOrder.status
+                  )}`}
+                >
+                  {getStatusText(selectedOrder.status)}
+                </span>
+              </div>
+
+              {selectedOrder.droneId && (
+                <div>
+                  <div className="text-sm text-gray-400">Drone Alocado</div>
+                  <div className="text-white">{selectedOrder.droneId}</div>
+                </div>
+              )}
+
+              {/* Tempo de Entrega */}
+              <div className="mt-4 p-3 bg-gray-900 rounded border border-gray-600">
+                <div className="text-sm text-gray-300 mb-2">
+                  Tempo de Entrega:
+                </div>
+                {loadingDeliveryTime ? (
+                  <div className="text-blue-400">Calculando...</div>
+                ) : deliveryTime ? (
+                  deliveryTime.error ? (
+                    <div className="text-red-400">{deliveryTime.error}</div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="text-lg font-medium text-green-400">
+                        {deliveryTime.timeFormatted}
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        Distância: {Math.round(deliveryTime.distance)}m
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        Velocidade: {deliveryTime.maxSpeed || "N/A"} km/h
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        Waypoints: {deliveryTime.waypoints}
+                      </div>
+                      {deliveryTime.maxSpeed && deliveryTime.maxSpeed <= 0 && (
+                        <div className="text-sm text-yellow-400">
+                          ⚠️ Velocidade não definida no tipo de drone
+                        </div>
+                      )}
+                    </div>
+                  )
+                ) : (
+                  <div className="text-gray-400">Clique para calcular</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmationModal.isOpen}
+        onClose={() =>
+          setConfirmationModal({ ...confirmationModal, isOpen: false })
+        }
+        onConfirm={confirmationModal.onConfirm}
+        title={confirmationModal.title}
+        message={confirmationModal.message}
+        type={confirmationModal.type}
+      />
     </div>
   );
 };

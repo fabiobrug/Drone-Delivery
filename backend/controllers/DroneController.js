@@ -153,9 +153,15 @@ export class DroneController {
   }
 
   async removeOrderFromDrone(req, res) {
+    console.log("=== CONTROLLER CALLED ===");
     try {
       const { id, orderId } = req.params;
+      console.log(
+        `🔍 DEBUG - Controller received request: droneId=${id}, orderId=${orderId}`
+      );
+
       const result = await this.droneService.removeOrderFromDrone(id, orderId);
+      console.log(`🔍 DEBUG - Controller result:`, result);
 
       res.json({
         success: result.success,
@@ -163,6 +169,7 @@ export class DroneController {
         data: result.data,
       });
     } catch (error) {
+      console.error(`❌ DEBUG - Controller error:`, error);
       res.status(400).json({
         success: false,
         error: error.message,
@@ -181,6 +188,75 @@ export class DroneController {
       });
     } catch (error) {
       res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  async ensureIdleDronesAreAtBase(req, res) {
+    try {
+      const result = await this.droneService.ensureIdleDronesAreAtBase();
+
+      res.json({
+        success: result.success,
+        message: result.message,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  async startDroneFlight(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await this.droneService.startDroneFlight(id);
+
+      res.json({
+        success: result.success,
+        message: result.message,
+        data: result.data,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  async getDeliveryTimeInfo(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await this.droneService.getDeliveryTimeInfo(id);
+
+      res.json({
+        success: result.success,
+        message: result.message,
+        data: result.data,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  async stopDroneSimulation(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await this.droneService.stopDroneSimulation(id);
+
+      res.json({
+        success: result.success,
+        message: result.message,
+      });
+    } catch (error) {
+      res.status(400).json({
         success: false,
         error: error.message,
       });

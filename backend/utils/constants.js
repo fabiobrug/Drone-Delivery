@@ -32,14 +32,14 @@ export const OPTIMIZATION_METHODS = {
 export const SYSTEM_CONFIG = {
   MAX_DRONES: 50,
   MAX_ORDERS: 1000,
-  GRID_SIZE: 100,
+  GRID_SIZE: 50, // Alterado de 100 para 50 (cada unidade = 100m)
   CELL_SIZE: 20,
-  BASE_POSITION: { x: 50, y: 50 },
+  BASE_POSITION: { x: 25, y: 25 }, // Alterado de (50,50) para (25,25)
   MAP_BOUNDS: {
     minX: 0,
     minY: 0,
-    maxX: 1000,
-    maxY: 1000,
+    maxX: 50, // Alterado de 1000 para 50 (50 * 100m = 5km)
+    maxY: 50, // Alterado de 1000 para 50 (50 * 100m = 5km)
   },
   UPDATE_INTERVAL: 5000, // 5 segundos
   MAX_DELIVERY_TIME: 30, // 30 minutos
@@ -112,7 +112,7 @@ export const VALIDATION_LIMITS = {
   },
   COORDINATES: {
     MIN: 0,
-    MAX: 1000,
+    MAX: 50, // Alterado de 1000 para 50 (cada unidade = 100m)
   },
   WEIGHT: {
     MIN: 0.1,

@@ -72,6 +72,28 @@ export const DroneProvider = ({ children }) => {
     loadInitialData();
   }, []);
 
+  // Polling automático para drones em movimento
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      // Verificar se há drones voando ou retornando
+      const activeDrones = drones.filter(
+        (drone) => drone.status === "flying" || drone.status === "returning"
+      );
+
+      if (activeDrones.length > 0) {
+        console.log(`🔄 Atualizando ${activeDrones.length} drones ativos...`);
+        try {
+          await refreshDrones();
+          await refreshOrders();
+        } catch (error) {
+          console.error("Erro ao atualizar drones ativos:", error);
+        }
+      }
+    }, 3000); // Atualizar a cada 3 segundos
+
+    return () => clearInterval(interval);
+  }, [drones]); // Dependência dos drones para recalcular quando mudarem
+
   const loadInitialData = async () => {
     try {
       setLoading(true);
@@ -99,6 +121,12 @@ export const DroneProvider = ({ children }) => {
       setNoFlyZones(noFlyZonesResponse.data || []);
       setConfig(configResponse.data || config);
       setStats(statsResponse.data || stats);
+
+      // Garantir que todos os drones IDLE estejam na posição correta
+      // Removido o timeout automático para evitar resetar a carga dos drones
+      // setTimeout(async () => {
+      //   await ensureIdleDronesAreAtBase();
+      // }, 1000);
     } catch (err) {
       console.error("Error loading initial data:", err);
       setError(err.message);
@@ -124,48 +152,54 @@ export const DroneProvider = ({ children }) => {
     }
   };
 
+  const refreshDrones = async () => {
+    try {
+      console.log("🔄 Refreshing drones...");
+      const response = await api.getDrones();
+      setDrones(response.data);
+      console.log("✅ Drones refreshed successfully");
+    } catch (err) {
+      console.error("❌ Error refreshing drones:", err);
+    }
+  };
+
+  const refreshOrders = async () => {
+    try {
+      console.log("🔄 Refreshing orders...");
+      const response = await api.getOrders();
+      setOrders(response.data);
+      console.log("✅ Orders refreshed successfully");
+    } catch (err) {
+      console.error("❌ Error refreshing orders:", err);
+    }
+  };
+
   const addOrder = async (orderData) => {
     try {
-      // Se forceCreate for true, pular validações e criar o pedido
-      if (orderData.forceCreate) {
-        const response = await api.createOrder({
-          ...orderData,
-          status: "pending",
-        });
-        setOrders((prev) => [...prev, response.data]);
-        await refreshStats();
-        return { success: true, data: response.data };
+      // Verificar se existe algum tipo de drone que pode carregar o peso
+      if (droneTypes.length === 0) {
+        return {
+          success: false,
+          error: "Não há tipos de drones cadastrados no sistema",
+        };
       }
 
-      // Verificar se existe algum tipo de drone que pode carregar o peso
+      // Verificar se há algum tipo de drone capaz de carregar o peso
       const capableDroneTypes = droneTypes.filter(
         (type) => type.capacity >= orderData.weight
       );
 
       if (capableDroneTypes.length === 0) {
+        const maxCapacity = Math.max(
+          ...droneTypes.map((type) => type.capacity || 0)
+        );
         return {
           success: false,
-          error: "NAO EXISTE NENHUM DRONE QUE AGUENTE ESTA CARGA",
+          error: `Peso máximo suportado pelos tipos de drones é ${maxCapacity}kg. Peso solicitado: ${orderData.weight}kg`,
         };
       }
 
-      // Verificar se há drones disponíveis do tipo capaz
-      const availableDrones = drones.filter(
-        (drone) =>
-          (drone.status === "idle" || drone.status === "loading") &&
-          droneTypes.find((type) => type.id === drone.typeId)?.capacity >=
-            orderData.weight
-      );
-
-      if (availableDrones.length === 0) {
-        return {
-          success: false,
-          error:
-            "OS DRONES PARA ESTE PESO ESTAO OCUPADOS NESTE MOMENTO, VOCE DESEJA ACEITAR O PEDIDO?",
-          requiresConfirmation: true,
-        };
-      }
-
+      // Criar o pedido sempre que houver capacidade suficiente
       const response = await api.createOrder({
         ...orderData,
         status: "pending",
@@ -194,23 +228,69 @@ export const DroneProvider = ({ children }) => {
   };
 
   const addNoFlyZone = async (zoneData) => {
+    // Criar uma zona temporária com ID único para atualização imediata
+    const tempZone = {
+      id: `temp-${Date.now()}`,
+      name: zoneData.name || `No-Fly Zone ${Date.now()}`,
+      description: zoneData.description || "",
+      points: zoneData.points || [],
+    };
+
     try {
+      // Atualizar o estado local imediatamente
+      setNoFlyZones((prev) => [...prev, tempZone]);
+
+      // Fazer a chamada para a API em background
       const response = await api.createNoFlyZone(zoneData);
-      setNoFlyZones((prev) => [...prev, response.data]);
+
+      // Substituir a zona temporária pela zona real da API
+      setNoFlyZones((prev) => {
+        return prev.map((zone) => {
+          if (zone.id === tempZone.id) {
+            // Garantir que a zona da API tenha a estrutura correta
+            return {
+              id: response.data.id,
+              name: response.data.name,
+              description: response.data.description || "",
+              points: response.data.points || [],
+            };
+          }
+          return zone;
+        });
+      });
+
       return { success: true, data: response.data };
     } catch (error) {
       console.error("Error creating no-fly zone:", error);
+
+      // Remover a zona temporária em caso de erro
+      setNoFlyZones((prev) => prev.filter((zone) => zone.id !== tempZone.id));
+
       return { success: false, error: error.message };
     }
   };
 
   const removeNoFlyZone = async (id) => {
     try {
-      await api.deleteNoFlyZone(id);
+      // Armazenar a zona que será removida para possível rollback
+      const zoneToRemove = noFlyZones.find((zone) => zone.id === id);
+
+      // Remover imediatamente do estado local
       setNoFlyZones((prev) => prev.filter((zone) => zone.id !== id));
+
+      // Fazer a chamada para a API em background
+      await api.deleteNoFlyZone(id);
+
       return { success: true };
     } catch (error) {
       console.error("Error deleting no-fly zone:", error);
+
+      // Em caso de erro, restaurar a zona (se ainda existir)
+      const zoneToRemove = noFlyZones.find((zone) => zone.id === id);
+      if (zoneToRemove) {
+        setNoFlyZones((prev) => [...prev, zoneToRemove]);
+      }
+
       return { success: false, error: error.message };
     }
   };
@@ -268,15 +348,31 @@ export const DroneProvider = ({ children }) => {
       const order = orders.find((o) => o.id === orderId);
       const drone = drones.find((d) => d.id === droneId);
 
-      if (order && drone) {
-        // Verificar se o drone pode carregar o peso
-        const newLoad = drone.currentLoad + order.weight;
-        if (newLoad > drone.capacity) {
-          return {
-            success: false,
-            message: `Capacidade excedida! O drone suporta ${drone.capacity}kg, mas tentando carregar ${newLoad}kg. Peso atual: ${drone.currentLoad}kg, Peso do pedido: ${order.weight}kg.`,
-          };
-        }
+      if (!order) {
+        return {
+          success: false,
+          message: "Pedido não encontrado",
+        };
+      }
+
+      if (!drone) {
+        return {
+          success: false,
+          message: "Drone não encontrado",
+        };
+      }
+
+      // Verificar se o drone pode carregar o peso
+      const newLoad = (drone.currentLoad || 0) + order.weight;
+      if (newLoad > drone.capacity) {
+        return {
+          success: false,
+          message: `Capacidade excedida! O drone suporta ${
+            drone.capacity
+          }kg, mas tentando carregar ${newLoad}kg. Peso atual: ${
+            drone.currentLoad || 0
+          }kg, Peso do pedido: ${order.weight}kg.`,
+        };
       }
 
       const response = await api.allocateOrderToDrone(droneId, orderId);
@@ -291,10 +387,13 @@ export const DroneProvider = ({ children }) => {
           )
         );
 
-        // Recarregar dados do drone para ter informações atualizadas
-        const droneResponse = await api.getDrone(droneId);
+        // Atualizar carga do drone localmente
         setDrones((prev) =>
-          prev.map((d) => (d.id === droneId ? droneResponse.data : d))
+          prev.map((d) =>
+            d.id === droneId
+              ? { ...d, currentLoad: newLoad, status: "loading" }
+              : d
+          )
         );
 
         // Recarregar estatísticas para atualizar eficiência
@@ -308,21 +407,41 @@ export const DroneProvider = ({ children }) => {
     }
   };
 
-  const removeOrderFromDrone = async (orderId) => {
+  const removeOrderFromDrone = async (orderId, droneId = null) => {
     try {
       const order = orders.find((o) => o.id === orderId);
-      if (!order || !order.droneId) {
+      if (!order) {
         return {
           success: false,
-          message: "Pedido não encontrado ou não alocado",
+          message: "Pedido não encontrado",
         };
       }
 
-      console.log("🗑️ Removing order", orderId, "from drone", order.droneId);
-      const response = await api.removeOrderFromDrone(order.droneId, orderId);
-      console.log("📋 Removal result:", response);
+      // Se droneId não foi fornecido, usar o droneId do pedido
+      const targetDroneId = droneId || order.droneId;
+      if (!targetDroneId) {
+        return {
+          success: false,
+          message: "Pedido não está alocado a nenhum drone",
+        };
+      }
 
-      if (response.success) {
+      // Buscar o drone para calcular a nova carga
+      const drone = drones.find((d) => d.id === targetDroneId);
+      if (!drone) {
+        return {
+          success: false,
+          message: "Drone não encontrado",
+        };
+      }
+
+      console.log(
+        `🔍 DEBUG - Context calling API with droneId: ${targetDroneId}, orderId: ${orderId}`
+      );
+      const response = await api.removeOrderFromDrone(targetDroneId, orderId);
+      console.log(`🔍 DEBUG - Context API response:`, response);
+
+      if (response && response.success) {
         // Atualizar estado local
         setOrders((prev) =>
           prev.map((o) =>
@@ -330,10 +449,21 @@ export const DroneProvider = ({ children }) => {
           )
         );
 
-        // Recarregar dados do drone
-        const droneResponse = await api.getDrone(order.droneId);
+        // Atualizar carga do drone localmente
+        const newLoad = Math.max(0, drone.currentLoad - order.weight);
         setDrones((prev) =>
-          prev.map((d) => (d.id === order.droneId ? droneResponse.data : d))
+          prev.map((d) =>
+            d.id === targetDroneId
+              ? {
+                  ...d,
+                  currentLoad: newLoad,
+                  status: newLoad === 0 ? "idle" : "loading",
+                  x: newLoad === 0 ? 25.0 : d.x,
+                  y: newLoad === 0 ? 25.0 : d.y,
+                  battery: newLoad === 0 ? 100.0 : d.battery,
+                }
+              : d
+          )
         );
 
         // Recarregar estatísticas para atualizar eficiência
@@ -342,7 +472,7 @@ export const DroneProvider = ({ children }) => {
 
       return response;
     } catch (error) {
-      console.error("❌ Error removing order from drone:", error);
+      console.error("Error removing order from drone:", error);
       return { success: false, message: error.message };
     }
   };
@@ -374,11 +504,47 @@ export const DroneProvider = ({ children }) => {
     }
   };
 
+  // Função para garantir que todos os drones IDLE estejam na posição (25,25) e com 100% de bateria
+  const ensureIdleDronesAreAtBase = async () => {
+    try {
+      const response = await api.ensureIdleDronesAreAtBase();
+
+      if (response.success) {
+        // Recarregar dados dos drones
+        const dronesResponse = await api.getDrones();
+        setDrones(dronesResponse.data || []);
+        await refreshStats();
+      }
+
+      return response;
+    } catch (error) {
+      console.error("Error ensuring idle drones are at base:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
   const deleteDrone = async (droneId) => {
     try {
+      // Primeiro, desalocar todos os pedidos do drone
+      const droneOrders = orders.filter((order) => order.droneId === droneId);
+
+      // Desalocar cada pedido individualmente
+      for (const order of droneOrders) {
+        try {
+          await api.removeOrderFromDrone(droneId, order.id);
+        } catch (error) {
+          console.warn(
+            `Failed to remove order ${order.id} from drone ${droneId}:`,
+            error
+          );
+        }
+      }
+
+      // Depois deletar o drone
       await api.deleteDrone(droneId);
       setDrones((prev) => prev.filter((drone) => drone.id !== droneId));
-      // Remover pedidos alocados ao drone
+
+      // Atualizar pedidos para status pending
       setOrders((prev) =>
         prev.map((order) =>
           order.droneId === droneId
@@ -443,7 +609,14 @@ export const DroneProvider = ({ children }) => {
   const calculateDeliveryTime = (drone, order) => {
     const distance = calculateDistance(drone.x, drone.y, order.x, order.y);
     const droneType = droneTypes.find((type) => type.id === drone.typeId);
-    const speed = droneType ? droneType.maxSpeed : 10; // velocidade padrão se não encontrar o tipo
+    const speed = droneType?.maxSpeed || 30; // velocidade padrão se não encontrar o tipo ou se for 0
+
+    // Verificar se a velocidade é válida
+    if (!speed || speed <= 0) {
+      console.warn(`Velocidade inválida para drone ${drone.id}: ${speed}`);
+      return 0; // Retornar 0 se a velocidade for inválida
+    }
+
     return distance / speed; // tempo em horas
   };
 
@@ -483,6 +656,19 @@ export const DroneProvider = ({ children }) => {
     // Função para verificar se uma posição está em uma zona de exclusão
     const isInNoFlyZone = (x, y) => {
       return noFlyZones.some((zone) => {
+        // Usar as informações de área se disponíveis
+        if (
+          zone.minX !== undefined &&
+          zone.maxX !== undefined &&
+          zone.minY !== undefined &&
+          zone.maxY !== undefined
+        ) {
+          return (
+            x >= zone.minX && x <= zone.maxX && y >= zone.minY && y <= zone.maxY
+          );
+        }
+
+        // Fallback para o método antigo
         const minX = Math.min(...zone.points.map((p) => p.x));
         const maxX = Math.max(...zone.points.map((p) => p.x));
         const minY = Math.min(...zone.points.map((p) => p.y));
@@ -645,6 +831,9 @@ export const DroneProvider = ({ children }) => {
         updateDroneType,
         loadInitialData,
         refreshStats,
+        refreshDrones,
+        refreshOrders,
+        ensureIdleDronesAreAtBase,
       }}
     >
       {children}
