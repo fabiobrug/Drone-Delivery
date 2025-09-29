@@ -19,7 +19,10 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: [
+      process.env.FRONTEND_URL || "http://localhost:5173",
+      "https://YOUR_FRONTEND_URL_HERE.vercel.app",
+    ],
     credentials: true,
   })
 );
@@ -68,10 +71,13 @@ app.use("*", (req, res) => {
 
 const PORT = config.PORT;
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Environment: ${config.NODE_ENV}`);
-  console.log(`🌐 Health check: http://localhost:${PORT}/health`);
-});
+// Only start server if not in Vercel environment
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📊 Environment: ${config.NODE_ENV}`);
+    console.log(`🌐 Health check: http://localhost:${PORT}/health`);
+  });
+}
 
 export default app;
