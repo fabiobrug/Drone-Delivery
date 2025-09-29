@@ -21,7 +21,7 @@ app.use(
   cors({
     origin: [
       process.env.FRONTEND_URL || "http://localhost:5173",
-      "https://YOUR_FRONTEND_URL_HERE.vercel.app",
+      "https://drone-delivery-ihch.vercel.app",
     ],
     credentials: true,
   })
