@@ -647,7 +647,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 👥 Team
 
 - **Fabio Brugnara** - Project Lead & Full-Stack Developer
-- **Development Team** - Backend & Frontend Development
 
 ## 📞 Support
 
@@ -655,7 +654,7 @@ For support, questions, or contributions:
 
 - **Issues**: [GitHub Issues](https://github.com/fabiobrug/Drone-Delivery/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/fabiobrug/Drone-Delivery/discussions)
-- **Email**: Contact the development team
+- **Email**: fabiobrug2006@gmail.com
 
 ## 🙏 Acknowledgments
 
